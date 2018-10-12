@@ -6,7 +6,7 @@ class Analyzer:
     def __init__(self, filename):
         song = gp.parse(filename)
         self.guitars = tuple(Guitar.from_track(GuitarTrack(track))
-                              for track in song.tracks if track.channel.instrument)
+                              for track in song.tracks if track.channel.instrument in GuitarTrack.GUITARS)
 
 
 class GuitarTrack:
@@ -32,7 +32,7 @@ class GuitarTrack:
 class Measure:
     def __init__(self, measure):
         self.time_signature = measure.header.timeSignature  # todo find useful values
-        self.marker = measure.marker.name if measure.marker else None
+        self.marker = getattr(measure.marker, 'name', None)
         self.beats = tuple(Beat(beat) for beat in measure.voices[0].beats)  # todo check this voices call
 
 
