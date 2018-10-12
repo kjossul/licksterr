@@ -3,7 +3,7 @@ from src.guitar import Guitar
 
 
 class TestGuitar(unittest.TestCase):
-    def test(self):
+    def test_creation(self):
         guitar = Guitar()
         self.assertEqual("{1: 'E', 2: 'B', 3: 'G', 4: 'D', 5: 'A', 6: 'E'}", str(guitar))
 
