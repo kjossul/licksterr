@@ -32,21 +32,26 @@ class Guitar:
         self.measures = tuple(Measure(measure) for measure in track.measures)
         self.strings = {i: String(note) for i, note in enumerate(reversed(self.tuning), 1)}
 
-    def calculate_intervals(self, box=None):
-        # todo calculate intervals for particular box shapes (relative to the song key)
-        prev = None
-        out = defaultdict(int)
+    def yield_sounds(self, pattern=None):
+        # todo yield only notes in particular pattern / shapes (i.e. positions on the fretboard)
         for measure in self.measures:
             for beat in measure.beats:
                 if len(beat.notes) > 1:  # if a beat contains more than one note is considered a separator
-                    prev = None
+                    yield Chord(beat.chord)
                 elif len(beat.notes) is 1:
                     note = beat.notes[0]
-                    curr = self.strings[note.string][note.value]
-                    if prev:
-                        i = intervals.determine(prev, curr, shorthand=True)
-                        out[i] += 1
-                    prev = curr
+                    yield self.strings[note.string][note.value]
+
+    def calculate_intervals(self, pattern=None):
+        out, prev = defaultdict(int), None
+        for sound in self.yield_sounds(pattern=pattern):
+            if isinstance(sound, Chord):
+                prev = None
+            else:
+                if prev:
+                    interval = intervals.determine(prev, sound, shorthand=True)
+                    out[interval] += 1
+                prev = sound
         return out
 
 
@@ -73,9 +78,9 @@ class Note:
 
 class Chord:
     def __init__(self, chord):
-        self.name = chord.name
-        self.strings = chord.strings
-        self.type = chord.type
+        self.name = getattr(chord, 'name', None)
+        self.strings = getattr(chord, 'strings', None)
+        self.type = getattr(chord, 'type', None)
 
 
 class String:
