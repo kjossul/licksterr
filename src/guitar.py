@@ -1,5 +1,60 @@
-import mingus.core.notes as notes
-from collections import defaultdict
+import guitarpro as gp
+from mingus.core import notes as notes
+
+
+class Song:
+    def __init__(self, filename):
+        song = gp.parse(filename)
+        self.guitars = tuple(Guitar.from_track(GuitarTrack(track))
+                              for track in song.tracks if track.channel.instrument in GuitarTrack.GUITARS)
+
+
+class Guitar:
+    GUITARS = {
+        24: "Nylon string guitar",
+        25: "Steel string guitar",
+        26: "Jazz Electric guitar",
+        27: "Clean guitar",
+        28: "Muted guitar",
+        29: "Overdrive guitar",
+        30: "Distortion guitar"
+    }
+
+    def __init__(self, track):
+        if track.channel.instrument not in self.GUITARS:
+            raise ValueError("Track is not a guitar instrument")
+        self.name = track.name
+        self.is_12_stringed = track.is12StringedGuitarTrack
+        self.tuning = "".join(str(string)[0] for string in reversed(track.strings))
+        self.measures = tuple(Measure(measure) for measure in track.measures)
+        self.strings = {i: String(note) for i, note in enumerate(reversed(self.tuning), 1)}
+
+
+class Measure:
+    def __init__(self, measure):
+        self.time_signature = measure.header.timeSignature  # todo find useful values
+        self.marker = getattr(measure.marker, 'name', None)
+        self.beats = tuple(Beat(beat) for beat in measure.voices[0].beats)  # todo check this voices call
+
+
+class Beat:
+    def __init__(self, beat):
+        self.chord = Chord(beat.effect.chord) if beat.effect.chord else None
+        self.notes = tuple(Note(note) for note in beat.notes)
+
+
+class Note:
+    def __init__(self, note):
+        self.string = note.string
+        self.value = note.value
+        self.effects = note.effect
+
+
+class Chord:
+    def __init__(self, chord):
+        self.name = chord.name
+        self.strings = chord.strings
+        self.type = chord.type
 
 
 class String:
@@ -11,36 +66,9 @@ class String:
         self.tuning = note
         base = notes.note_to_int(note)
         self.frets = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
-        self.notes = defaultdict(lambda: defaultdict(int))  # {measure: {beat: value}}
 
-    def count_hits(self):
-        out = defaultdict(int)
-        for beat in self.notes.values():
-            for v in beat.values():
-                out[v] += 1
-        return out
+    def __getitem__(self, item):
+        return self.frets[item]
 
     def __str__(self):
         return f"{self.tuning}"
-
-
-class Guitar:
-    def __init__(self, name='Guitar', tuning='EADGBE', is_12_stringed=False):
-        self.name = name
-        strings = 6 * (1 + is_12_stringed)
-        try:
-            self.strings = {i: String(note) for i, note in enumerate(reversed(tuning), 1)}
-        except ValueError:
-            raise ValueError(f"Tuning {tuning} for guitar with {strings} is invalid")
-
-    @classmethod
-    def from_track(cls, track):
-        instance = cls(track.name, track.tuning, track.is_12_stringed)
-        for i, measure in enumerate(track.measures):
-            for j, beat in enumerate(measure.beats):
-                for note in beat.notes:
-                    instance.strings[note.string].notes[i][j] = note.value
-        return instance
-
-    def __str__(self):
-        return str({n: str(string) for n, string in self.strings.items()})
