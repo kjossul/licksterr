@@ -23,13 +23,15 @@ class Guitar:
         30: "Distortion guitar"
     }
 
-    def __init__(self, track):
-        if track.channel.instrument not in self.GUITARS:
-            raise ValueError("Track is not a guitar instrument")
-        self.name = track.name
-        self.is_12_stringed = track.is12StringedGuitarTrack
-        self.tuning = "".join(str(string)[0] for string in reversed(track.strings))
-        self.measures = tuple(Measure(measure) for measure in track.measures)
+    def __init__(self, track=None, tuning='EADGBE'):
+        self.tuning = tuning
+        if track:
+            if track.channel.instrument not in self.GUITARS:
+                raise ValueError("Track is not a guitar instrument")
+            self.name = track.name
+            self.is_12_stringed = track.is12StringedGuitarTrack
+            self.tuning = "".join(str(string)[0] for string in reversed(track.strings))
+            self.measures = tuple(Measure(measure) for measure in track.measures)
         self.strings = {i: String(note) for i, note in enumerate(reversed(self.tuning), 1)}
 
     def yield_sounds(self, pattern=None):
@@ -91,7 +93,7 @@ class Chord:
 
 
 class String:
-    FRETS = 24
+    FRETS = 23
 
     def __init__(self, note):
         if not notes.is_valid_note(note):
