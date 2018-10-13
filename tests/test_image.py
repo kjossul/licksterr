@@ -5,7 +5,7 @@ from src import ASSETS_FOLDER
 from src.image import Fretboard
 
 
-class TestGuitar(unittest.TestCase):
+class TestImage(unittest.TestCase):
     TEST_ASSETS = os.path.join(ASSETS_FOLDER, "tests")
 
     def test_fill(self):

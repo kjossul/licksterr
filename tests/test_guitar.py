@@ -2,7 +2,7 @@ import os
 import unittest
 
 from src import ASSETS_FOLDER
-from src.guitar import Song
+from src.guitar import Song, Form
 
 
 class TestGuitar(unittest.TestCase):
@@ -41,3 +41,9 @@ class TestGuitar(unittest.TestCase):
         intervals = self.song.guitars[2].calculate_intervals()
         expected = {'2': 1, '3': 1, 'b3': 2, 'b7': 1}
         self.assertDictEqual(expected, intervals)
+
+    def test_caged(self):
+        """CAGED system should find all roots"""
+        expected = self.song.guitars[0].get_notes('C')
+        actual = Form.chain('C', 1)
+        self.assertSetEqual(expected, actual)

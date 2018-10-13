@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import guitarpro as gp
 from mingus.core import intervals
@@ -54,6 +54,13 @@ class Guitar:
                 prev = sound
         return out
 
+    def get_notes(self, note):
+        """Returns a set of (string, fret) pairs that match with the given note"""
+        out = set()
+        for i, string in self.strings.items():
+            out.update({(i, n) for n in string.get_notes(note)})
+        return out
+
 
 class Measure:
     def __init__(self, measure):
@@ -93,8 +100,39 @@ class String:
         base = notes.note_to_int(note)
         self.notes = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
 
+    def get_notes(self, note):
+        return {i for i, n in enumerate(self.notes) if n == note}
+
     def __getitem__(self, item):
         return self.notes[item]
 
     def __str__(self):
         return f"{self.tuning}"
+
+
+class Form:
+    FORMS = OrderedDict({
+        'C': {'notes': {(2, 0), (5, 2)}, 'width': 2},
+        'A': {'notes': {(5, 0), (3, 2)}, 'width': 2},
+        'G': {'notes': {(3, 0), (1, 3), (6, 3)}, 'width': 3},
+        'E': {'notes': {(1, 0), (6, 0), (4, 2)}, 'width': 2},
+        'D': {'notes': {(4, 0), (2, 3)}, 'width': 3},
+    })
+
+    def __init__(self, form):
+        try:
+            self.notes = self.FORMS[form]['notes']
+        except IndexError:
+            raise ValueError(f'{form} is not a valid form')
+
+    @classmethod
+    def chain(cls, form, start=0, end=String.FRETS):
+        """Chains together all the forms starting from the given form and fret"""
+        roots = set()
+        caged = "CAGED" * 3
+        for form in caged[caged.index(form):]:
+            for note in cls.FORMS[form]['notes']:
+                if note[1] + start < end:
+                    roots.add((note[0], note[1] + start))
+            start += cls.FORMS[form]['width']
+        return roots
