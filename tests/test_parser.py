@@ -1,10 +1,12 @@
 import os
 import unittest
+
+from src import ASSETS_FOLDER
 from src.parser import Analyzer
 
 
 class TestParser(unittest.TestCase):
-    TEST_ASSETS = os.path.join("..", "assets", "tests")
+    TEST_ASSETS = os.path.join(ASSETS_FOLDER, "tests")
 
     @classmethod
     def setUpClass(cls):
