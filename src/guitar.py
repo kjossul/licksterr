@@ -6,7 +6,8 @@ from mingus.core import notes
 
 
 class Song:
-    def __init__(self, filename):
+    def __init__(self, filename, guitar_cls=None):
+        guitar_cls = guitar_cls if guitar_cls else Guitar
         song = gp.parse(filename)
         self.guitars = tuple(Guitar.from_track(GuitarTrack(track))
                               for track in song.tracks if track.channel.instrument in GuitarTrack.GUITARS)
@@ -56,11 +57,12 @@ class Guitar:
                 prev = sound
         return out
 
-    def get_notes(self, note):
-        """Returns a set of (string, fret) pairs that match with the given note"""
+    def get_notes(self, ns):
+        """Returns a set of (string, fret) pairs that match with the given notes"""
+        ns = tuple(n for n in ns) if not isinstance(ns, str) else (ns,)
         out = set()
         for i, string in self.strings.items():
-            out.update({(i, n) for n in string.get_notes(note)})
+            out.update({(i, n) for n in string.get_notes(ns)})
         return out
 
 
@@ -102,8 +104,9 @@ class String:
         base = notes.note_to_int(note)
         self.notes = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
 
-    def get_notes(self, note):
-        return {i for i, n in enumerate(self.notes) if n == note}
+    def get_notes(self, ns):
+        ns = ns if not isinstance(ns, str) else {ns}
+        return tuple(i for i, n1 in enumerate(self.notes) if any(notes.is_enharmonic(n1, n2) for n2 in ns))
 
     def __getitem__(self, item):
         return self.notes[item]
@@ -113,28 +116,47 @@ class String:
 
 
 class Form:
+    # todo make this tuning-dependent. A form depends on the tuning and is part of the guitar.
     FORMS = OrderedDict({
-        'C': {'notes': {(2, 0), (5, 2)}, 'width': 2},
-        'A': {'notes': {(5, 0), (3, 2)}, 'width': 2},
-        'G': {'notes': {(3, 0), (1, 3), (6, 3)}, 'width': 3},
-        'E': {'notes': {(1, 0), (6, 0), (4, 2)}, 'width': 2},
-        'D': {'notes': {(4, 0), (2, 3)}, 'width': 3},
+        'C': {'left': 2, 'right': 5, 'width': 2},
+        'A': {'left': 5, 'right': 3, 'width': 2},
+        'G': {'left': 3, 'right': 1, 'width': 3},
+        'E': {'left': 1, 'right': 4, 'width': 2},
+        'D': {'left': 4, 'right': 2, 'width': 3},
     })
+    GUITAR = Guitar()
 
-    def __init__(self, form):
+    def __init__(self, key, scale, form, octave=0):
+        """octave is the index of the octave to choose (0 means the leftmost)"""
         try:
-            self.notes = self.FORMS[form]['notes']
-        except IndexError:
-            raise ValueError(f'{form} is not a valid form')
+            self.key = key
+            self.scale = scale
+            self.form = form
+            scale_notes = scale(key).ascending()
+            root_forms = self.get_root_forms(key, form)
+            # Keeps the first position if we have finished the fretboard
+            roots = root_forms[octave] if len(root_forms) > octave else root_forms[octave-1]
+            self.notes = [(i, note) for i, string in self.GUITAR.strings.items()
+                          for note in string.get_notes(scale_notes) if roots[0][1] - 2 <= note <= roots[-1][1] + 1]
+            # todo remove notes that should be out of the boxes
+        except TypeError:
+            raise TypeError(f"{scale} object is not a scale defined in mingus.core.scales.")
+        except AttributeError:
+            raise AttributeError(f"Form {form} is invalid.")
 
     @classmethod
-    def chain(cls, form, start=0, end=String.FRETS):
-        """Chains together all the forms starting from the given form and fret"""
-        roots = set()
-        caged = "CAGED" * 3
-        for form in caged[caged.index(form):]:
-            for note in cls.FORMS[form]['notes']:
-                if note[1] + start < end:
-                    roots.add((note[0], note[1] + start))
-            start += cls.FORMS[form]['width']
-        return roots
+    def get_root_forms(cls, key, form):
+        form = cls.FORMS[form]
+        l, r, w = form['left'], form['right'], form['width']
+        left = cls.GUITAR.strings[l].get_notes(key)
+        right = tuple(l + w for l in left)
+        out = []
+        for n1, n2 in zip(left, right):
+            r = form['right']
+            if r == 1:  # G form
+                out.append(((l, n1), (1, n2), (6, n2)))
+            elif l == 1:  # E form
+                out.append(((1, n1), (6, n1), (r, n2)))
+            else:  # C, A, D forms have just two notes
+                out.append(((l, n1), (r, n2)))
+        return out

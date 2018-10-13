@@ -1,8 +1,11 @@
 import os
 import unittest
 
+from mingus.core.keys import major_keys
+
 from src import ASSETS_FOLDER
-from src.guitar import Song, Form
+from src.analyzer import yield_scales
+from src.guitar import Song, Form, String
 
 
 class TestGuitar(unittest.TestCase):
@@ -44,6 +47,20 @@ class TestGuitar(unittest.TestCase):
 
     def test_caged(self):
         """CAGED system should find all roots"""
-        expected = self.song.guitars[0].get_notes('C')
-        actual = Form.chain('C', 1)
-        self.assertSetEqual(expected, actual)
+        for key in major_keys:
+            expected = self.song.guitars[0].get_notes(key)
+            actual = set()
+            for f in 'CAGED':
+                for form in Form.get_root_forms(key, f):
+                    for note in form:
+                        if note[1] < String.FRETS:
+                            actual.add(note)
+            self.assertSetEqual(expected, actual)
+
+    def test_scale(self):
+        """Combining the boxes should yield the same result as getting all the notes"""
+        for key, scale in yield_scales():
+            forms = [Form(key, scale, form, octave) for form in Form.FORMS.keys() for octave in (0, 1)]
+            actual = set().union(*[form.notes for form in forms])
+            expected = self.song.guitars[0].get_notes(scale(key).ascending())
+            self.assertSetEqual(expected, actual)
