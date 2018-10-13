@@ -1,5 +1,6 @@
 import guitarpro as gp
-from mingus.core import notes as notes
+from mingus.core import intervals
+from mingus.core import notes
 
 
 class Song:
@@ -29,12 +30,29 @@ class Guitar:
         self.measures = tuple(Measure(measure) for measure in track.measures)
         self.strings = {i: String(note) for i, note in enumerate(reversed(self.tuning), 1)}
 
+    def calculate_intervals(self, box=None):
+        # todo calculate intervals for particular box shapes (relative to the song key)
+        prev = None
+        out = []
+        for measure in self.measures:
+            for beat in measure.beats:
+                if len(beat.notes) > 1:  # if a beat contains more than one note is considered a separator
+                    prev = None
+                elif len(beat.notes) is 1:
+                    note = beat.notes[0]
+                    curr = self.strings[note.string][note.value]
+                    if prev:
+                        out.append(intervals.determine(prev, curr, shorthand=True))
+                    prev = curr
+        return out
+
 
 class Measure:
     def __init__(self, measure):
-        self.time_signature = measure.header.timeSignature  # todo find useful values
-        self.marker = getattr(measure.marker, 'name', None)
-        self.beats = tuple(Beat(beat) for beat in measure.voices[0].beats)  # todo check this voices call
+        signature = measure.header.timeSignature
+        self.time_signature = (signature.numerator, signature.denominator)
+        self.marker = measure.marker.name if measure.marker else None
+        self.beats = tuple(Beat(beat) for beat in measure.voices[0].beats)  # todo handle multiple voices
 
 
 class Beat:
@@ -65,10 +83,10 @@ class String:
             raise ValueError(f"Note {note} is invalid.")
         self.tuning = note
         base = notes.note_to_int(note)
-        self.frets = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
+        self.notes = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
 
     def __getitem__(self, item):
-        return self.frets[item]
+        return self.notes[item]
 
     def __str__(self):
         return f"{self.tuning}"

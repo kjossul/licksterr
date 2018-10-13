@@ -7,4 +7,4 @@ The project goal is to parse `.gp*` files and extract information on scales and 
 ## Dependencies
 *  [PyGuitarPro](https://github.com/Perlence/PyGuitarPro) (a Python port of 
 [AlphaTab](https://www.alphatab.net/documentation/)) to extract information from the tabs.
-* [Mingus (Python3 port)](https://github.com/NonSvizzero/python-mingus) to handle music theory related stuff
+* [Mingus (Python3 port + scale additions)](https://github.com/NonSvizzero/python-mingus) to handle music theory related stuff
