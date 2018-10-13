@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import guitarpro as gp
 from mingus.core import intervals
 from mingus.core import notes
@@ -33,7 +35,7 @@ class Guitar:
     def calculate_intervals(self, box=None):
         # todo calculate intervals for particular box shapes (relative to the song key)
         prev = None
-        out = []
+        out = defaultdict(int)
         for measure in self.measures:
             for beat in measure.beats:
                 if len(beat.notes) > 1:  # if a beat contains more than one note is considered a separator
@@ -42,7 +44,8 @@ class Guitar:
                     note = beat.notes[0]
                     curr = self.strings[note.string][note.value]
                     if prev:
-                        out.append(intervals.determine(prev, curr, shorthand=True))
+                        i = intervals.determine(prev, curr, shorthand=True)
+                        out[i] += 1
                     prev = curr
         return out
 

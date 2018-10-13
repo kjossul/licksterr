@@ -39,4 +39,5 @@ class TestGuitar(unittest.TestCase):
 
     def test_intervals(self):
         intervals = self.song.guitars[2].calculate_intervals()
-        self.assertListEqual(['2', '3', 'b3', 'b7', '1'], intervals)
+        expected = {'2': 1, '3': 1, 'b3': 2, 'b7': 1}
+        self.assertDictEqual(expected, intervals)
