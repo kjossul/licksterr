@@ -1,4 +1,5 @@
 from collections import defaultdict, OrderedDict
+from heapq import nlargest
 
 import guitarpro as gp
 from mingus.core import intervals
@@ -60,10 +61,7 @@ class Guitar:
     def get_notes(self, ns):
         """Returns a set of (string, fret) pairs that match with the given notes"""
         ns = tuple(n for n in ns) if not isinstance(ns, str) else (ns,)
-        out = set()
-        for i, string in self.strings.items():
-            out.update({(i, n) for n in string.get_notes(ns)})
-        return out
+        return {i: string.get_notes(ns) for i, string in self.strings.items()}
 
 
 class Measure:
@@ -106,7 +104,7 @@ class String:
 
     def get_notes(self, ns):
         ns = ns if not isinstance(ns, str) else {ns}
-        return tuple(i for i, n1 in enumerate(self.notes) if any(notes.is_enharmonic(n1, n2) for n2 in ns))
+        return {i for i, n1 in enumerate(self.notes) if any(notes.is_enharmonic(n1, n2) for n2 in ns)}
 
     def __getitem__(self, item):
         return self.notes[item]
@@ -116,7 +114,6 @@ class String:
 
 
 class Form:
-    # todo make this tuning-dependent. A form depends on the tuning and is part of the guitar.
     FORMS = OrderedDict({
         'C': {'left': 2, 'right': 5, 'width': 2},
         'A': {'left': 5, 'right': 3, 'width': 2},
@@ -126,37 +123,73 @@ class Form:
     })
     GUITAR = Guitar()
 
-    def __init__(self, key, scale, form, octave=0):
+    def __init__(self, key, scale, form):
         """octave is the index of the octave to choose (0 means the leftmost)"""
         try:
             self.key = key
             self.scale = scale
             self.form = form
+            self.roots = self.get_form_roots(key, form)
+            self.notes = defaultdict(set)
             scale_notes = scale(key).ascending()
-            root_forms = self.get_root_forms(key, form)
-            # Keeps the first position if we have finished the fretboard
-            roots = root_forms[octave] if len(root_forms) > octave else root_forms[octave-1]
-            self.notes = [(i, note) for i, string in self.GUITAR.strings.items()
-                          for note in string.get_notes(scale_notes) if roots[0][1] - 2 <= note <= roots[-1][1] + 1]
-            # todo remove notes that should be out of the boxes
+            max_notes = 2 if 'Pentatonic' in scale.__name__ else 3
+            for i, string in self.GUITAR.strings.items():
+                # gets all the scale notes of the current string with a "score" based on the h distance from roots
+                curr = OrderedDict({note: self.get_score(note) for note in string.get_notes(scale_notes)})
+                for note in nlargest(max_notes, curr, key=curr.get):
+                    self.notes[i].add(note)
+            self.simplify()
+
         except TypeError:
             raise TypeError(f"{scale} object is not a scale defined in mingus.core.scales.")
         except AttributeError:
             raise AttributeError(f"Form {form} is invalid.")
 
+    def simplify(self):
+        """
+        When on a string there are two notes separated by 4 frets, we need to remove one of the two, because the form
+        becomes easier to play this way. If it's the left, we try to move it on lower string, else on the highest.
+        """
+        for string, notes in self.notes.items():
+            l, r = min(notes), max(notes)
+            if r - l > 3:
+                if self.get_score(l) < self.get_score(r):
+                    self.notes[string].remove(l)
+                    if string != 6:
+                        n = self.GUITAR.strings[string][l]
+                        lower_string = self.GUITAR.strings[string + 1]
+                        self.notes[string + 1].add(max(lower_string.get_notes(n), key=self.get_score))
+                else:
+                    self.notes[string].remove(r)
+                    if string != 1:
+                        n = self.GUITAR.strings[string][r]
+                        higher_string = self.GUITAR.strings[string - 1]
+                        self.notes[string - 1].add(max(higher_string.get_notes(n), key=self.get_score))
+        self.transpose()
+
+    def transpose(self):
+        """
+        Moves the form to the next octave if there are any outliers around. Fixes issues for forms close to the
+        open strings.
+        """
+        if any(max(ns) - min(ns) > 6 for ns in self.notes.values()):
+            for string, ns in self.notes.items():
+                self.notes[string] = {n + 12 if n < 5 else n for n in ns}
+
+    def get_score(self, note):
+        l, r = min(self.roots.values()), max(self.roots.values())
+        return (note - l) * (r - note)
+
     @classmethod
-    def get_root_forms(cls, key, form):
+    def get_form_roots(cls, key, form):
+        """Gets all the roots for the given form and key"""
         form = cls.FORMS[form]
         l, r, w = form['left'], form['right'], form['width']
-        left = cls.GUITAR.strings[l].get_notes(key)
-        right = tuple(l + w for l in left)
-        out = []
-        for n1, n2 in zip(left, right):
-            r = form['right']
-            if r == 1:  # G form
-                out.append(((l, n1), (1, n2), (6, n2)))
-            elif l == 1:  # E form
-                out.append(((1, n1), (6, n1), (r, n2)))
-            else:  # C, A, D forms have just two notes
-                out.append(((l, n1), (r, n2)))
-        return out
+        left = min(cls.GUITAR.strings[l].get_notes(key))
+        right = left + w
+        if r == 1:  # G form
+            return {l: left, 1: right, 6: right}
+        elif l == 1:  # E form
+            return {1: left, 6: left, r: right}
+        else:  # C, A, D forms have just two notes
+            return {l: left, r: right}

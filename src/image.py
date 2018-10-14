@@ -27,15 +27,16 @@ class GuitarImage(Guitar):
                 self.fill_circle(new_xy, color, im)
         return im
 
-    def fill_note(self, string, fret, color=None, im=None):
-        self.fill_circle(string.positions[fret], color=color, im=im)
+    def fill_note(self, string, note, color=None, im=None):
+        self.fill_circle(string.positions[note], color=color, im=im)
 
     def fill_scale_position(self, key, scale, form, im=None):
         # todo make color pattern for scale degrees customizable
         im = im if im else self.im
         form = Form(key, scale, form)
-        for string, fret in form.notes:
-            self.fill_note(self.strings[string], fret, im=im)
+        for string, ns in form.notes.items():
+            for note in ns:
+                self.fill_note(self.strings[string], note, im=im)
         return im
 
 

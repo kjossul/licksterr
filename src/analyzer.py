@@ -1,7 +1,6 @@
 import os
 
 from mingus.core import scales
-from mingus.core.keys import minor_keys, major_keys
 
 from src import ASSETS_FOLDER
 from src.guitar import Form
@@ -10,11 +9,11 @@ from src.image import GuitarImage
 ANALYSIS_FOLDER = os.path.join(ASSETS_FOLDER, "analysis")
 
 
-def yield_scales():
+def yield_scales(keys=('G',)):
     for scale in scales._Scale.__subclasses__():
         if scale.type == 'diatonic':
             continue
-        for key in (minor_keys if scale.type == 'minor' else major_keys):
+        for key in keys:
             yield (key, scale)
 
 
@@ -25,7 +24,11 @@ def create_scales():
             im = guitar.fill_scale_position(key, scale, form, im=guitar.im.copy())
             if key.islower():
                 key = key[0].upper() + key[1:]
-            dir = os.path.join(ANALYSIS_FOLDER, "scales", scale.__name__, key)
+            dir = os.path.join(ANALYSIS_FOLDER, "scales", scale.__name__)
             if not os.path.exists(dir):
                 os.makedirs(dir)
             im.save(os.path.join(dir, f"{form}.png"))
+
+
+if __name__ == '__main__':
+    create_scales()
