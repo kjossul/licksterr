@@ -161,7 +161,12 @@ class Form:
         pos = self.GUITAR.strings[6].get_notes(scale_notes)
         candidates = (n1 for n1, n2 in zip(pos[:-1], (pos[0],) + pos[:-2]) if n2 - n1 != 1)
         # picks the first note that has a decent score to start searching for others
-        self.notes[6].append(next(note for note in candidates if self.get_score(note) >= -3))
+        if self.scale in (scales.MajorPentatonic, scales.MinorPentatonic) or \
+                self.form == 'C' and self.scale in (scales.Lydian, scales.MajorBlues):
+            min_score = -3
+        else:
+            min_score = 0
+        self.notes[6].append(next(note for note in candidates if self.get_score(note) >= min_score))
         start = self.notes[6][0] + 1
         for i, string in reversed(self.GUITAR.strings.items()):
             if i == 1:
