@@ -181,7 +181,7 @@ class Form:
         """
         if any(max(ns) - min(ns) > 6 for ns in self.notes.values()):
             for string, ns in self.notes.items():
-                self.notes[string] = {n + 12 if n < 5 else n for n in ns}
+                self.notes[string] = {n + 12 if n < 8 else n for n in ns}
 
     def get_score(self, note):
         l, r = min(self.roots.values()), max(self.roots.values())
