@@ -10,8 +10,9 @@ ANALYSIS_FOLDER = os.path.join(ASSETS_FOLDER, "analysis")
 
 
 def yield_scales(keys=('G',)):
+    not_supported = ('Diatonic', 'WholeTone')
     for scale in scales._Scale.__subclasses__():
-        if scale.type == 'diatonic':
+        if any(x == scale.__name__ for x in not_supported):
             continue
         for key in keys:
             yield (key, scale)

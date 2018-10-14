@@ -132,7 +132,14 @@ class Form:
             self.roots = self.get_form_roots(key, form)
             self.notes = defaultdict(set)
             scale_notes = scale(key).ascending()
-            max_notes = 2 if 'Pentatonic' in scale.__name__ else 3
+            if 'Pentatonic' in scale.__name__ :
+                max_notes = 2
+            elif 'Chromatic' in scale.__name__:
+                max_notes = 4
+            elif 'WholeTone' in scale.__name__:
+                raise NotImplementedError('WholeTone scale not supported.')
+            else:
+                max_notes = 3
             for i, string in self.GUITAR.strings.items():
                 # gets all the scale notes of the current string with a "score" based on the h distance from roots
                 curr = OrderedDict({note: self.get_score(note) for note in string.get_notes(scale_notes)})
