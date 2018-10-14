@@ -1,9 +1,10 @@
 from collections import defaultdict, OrderedDict
-from heapq import nlargest
 
 import guitarpro as gp
-from mingus.core import intervals
+from mingus.core import intervals, scales
 from mingus.core import notes
+
+from src.exceptions import FormShapeError
 
 
 class Song:
@@ -34,7 +35,7 @@ class Guitar:
             self.is_12_stringed = track.is12StringedGuitarTrack
             self.tuning = "".join(str(string)[0] for string in reversed(track.strings))
             self.measures = tuple(Measure(measure) for measure in track.measures)
-        self.strings = {i: String(note) for i, note in enumerate(reversed(self.tuning), 1)}
+        self.strings = OrderedDict({i: String(note) for i, note in enumerate(reversed(self.tuning), 1)})
 
     def yield_sounds(self, pattern=None):
         # todo yield only notes in particular pattern / shapes (i.e. positions on the fretboard)
@@ -103,8 +104,8 @@ class String:
         self.notes = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
 
     def get_notes(self, ns):
-        ns = ns if not isinstance(ns, str) else {ns}
-        return {i for i, n1 in enumerate(self.notes) if any(notes.is_enharmonic(n1, n2) for n2 in ns)}
+        ns = ns if not isinstance(ns, str) else {ns}  # allows calls with strings
+        return tuple(i for i, n1 in enumerate(self.notes) if any(notes.is_enharmonic(n1, n2) for n2 in ns))
 
     def __getitem__(self, item):
         return self.notes[item]
@@ -114,6 +115,19 @@ class String:
 
 
 class Form:
+    SUPPORTED = {
+        scales.Ionian,
+        scales.Dorian,
+        scales.Phrygian,
+        scales.Lydian,
+        scales.Mixolydian,
+        scales.Aeolian,
+        scales.Locrian,
+        scales.MinorPentatonic,
+        scales.MajorPentatonic,
+        scales.MinorBlues,
+        scales.MajorBlues
+    }
     FORMS = OrderedDict({
         'C': {'left': 2, 'right': 5, 'width': 2},
         'A': {'left': 5, 'right': 3, 'width': 2},
@@ -129,72 +143,59 @@ class Form:
             self.key = key
             self.scale = scale
             self.form = form
-            self.roots = self.get_form_roots(key, form)
-            self.notes = defaultdict(set)
             scale_notes = scale(key).ascending()
-            if 'Pentatonic' in scale.__name__ :
-                max_notes = 2
-            elif 'Chromatic' in scale.__name__:
-                max_notes = 4
-            elif 'WholeTone' in scale.__name__:
-                raise NotImplementedError('WholeTone scale not supported.')
-            else:
-                max_notes = 3
-            for i, string in self.GUITAR.strings.items():
-                # gets all the scale notes of the current string with a "score" based on the h distance from roots
-                curr = OrderedDict({note: self.get_score(note) for note in string.get_notes(scale_notes)})
-                for note in nlargest(max_notes, curr, key=curr.get):
-                    self.notes[i].add(note)
-            self.simplify()
-
+            if scale not in self.SUPPORTED:
+                raise NotImplementedError(f'Supported scales: {self.SUPPORTED}')
         except TypeError:
             raise TypeError(f"{scale} object is not a scale defined in mingus.core.scales.")
         except AttributeError:
             raise AttributeError(f"Form {form} is invalid.")
+        try:
+            self.calculate_shape(form, key, scale_notes)
+        except FormShapeError:
+            self.calculate_shape(form, key, scale_notes, octave=1)
 
-    def simplify(self):
-        """
-        When on a string there are two notes separated by 4 frets, we need to remove one of the two, because the form
-        becomes easier to play this way. If it's the left, we try to move it on lower string, else on the highest.
-        """
-        for string, ns in self.notes.items():
-            l, r = min(ns), max(ns)
-            if r - l > 3:
-                if string != 6:
-                    n = self.GUITAR.strings[string][l]
-                    lower_string = self.GUITAR.strings[string + 1]
-                    note = max(lower_string.get_notes(n), key=self.get_score)
-                    if self.get_score(note) >= self.get_score(l):
-                        self.notes[string].remove(l)
-                        self.notes[string+1].add(note)
-                if string != 1:
-                    n = self.GUITAR.strings[string][r]
-                    higher_string = self.GUITAR.strings[string - 1]
-                    note = max(higher_string.get_notes(n), key=self.get_score)
-                    if self.get_score(note) >= self.get_score(r):
-                        self.notes[string].remove(r)
-                        self.notes[string-1].add(note)
-        self.transpose()
-
-    def transpose(self):
-        """
-        Moves the form to the next octave if there are any outliers around. Fixes issues for forms close to the
-        open strings.
-        """
-        if any(max(ns) - min(ns) > 6 for ns in self.notes.values()):
-            for string, ns in self.notes.items():
-                self.notes[string] = {n + 12 if n < 8 else n for n in ns}
+    def calculate_shape(self, form, key, scale_notes, octave=0):
+        self.roots = self.get_form_roots(key, form, octave=octave)
+        self.notes = defaultdict(list)
+        pos = self.GUITAR.strings[6].get_notes(scale_notes)
+        candidates = (n1 for n1, n2 in zip(pos[:-1], (pos[0],) + pos[:-2]) if n2 - n1 != 1)
+        # picks the first note that has a decent score to start searching for others
+        self.notes[6].append(next(note for note in candidates if self.get_score(note) >= -3))
+        start = self.notes[6][0] + 1
+        for i, string in reversed(self.GUITAR.strings.items()):
+            if i == 1:
+                # makes the two E strings the same, including the last found note on the high string
+                self.notes[6] = self.notes[1] + [note for note in self.notes[6] if note > self.notes[1][0]]
+                self.notes[1] = self.notes[6].copy()
+                break
+            for note in (n for n in string.get_notes(scale_notes) if n >= start):
+                # picks the note on the higher string that is closer to the current position of the index finger
+                higher_string_note = min(self.GUITAR.strings[i - 1].get_notes(string[note]),
+                                         key=lambda x: abs(self.notes[i][0] - x))
+                # A note is too far if the pinky has to go more than 3 frets away from the finger
+                is_far = note - self.notes[i][0] > 3
+                if is_far:
+                    # if this note is easier to get by going up a string do that
+                    if abs(self.notes[i][0] - higher_string_note) <= note - self.notes[i][0]:
+                        self.notes[i - 1].append(higher_string_note)
+                        start = higher_string_note + 1
+                        break
+                    else:
+                        raise FormShapeError  # can't find an easy shape, need to move up in octaves
+                else:
+                    self.notes[i].append(note)
 
     def get_score(self, note):
         l, r = min(self.roots.values()), max(self.roots.values())
         return (note - l) * (r - note)
 
     @classmethod
-    def get_form_roots(cls, key, form):
+    def get_form_roots(cls, key, form, octave=0):
         """Gets all the roots for the given form and key"""
         form = cls.FORMS[form]
         l, r, w = form['left'], form['right'], form['width']
-        left = min(cls.GUITAR.strings[l].get_notes(key))
+        left = min(cls.GUITAR.strings[l].get_notes(key)) + octave * 12
         right = left + w
         if r == 1:  # G form
             return {l: left, 1: right, 6: right}

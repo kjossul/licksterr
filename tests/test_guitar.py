@@ -46,22 +46,38 @@ class TestGuitar(unittest.TestCase):
         expected = {'2': 1, '3': 1, 'b3': 2, 'b7': 1}
         self.assertDictEqual(expected, intervals)
 
+
+class TestForm(unittest.TestCase):
     def test_caged(self):
         """CAGED system should find all roots"""
         for key in major_keys:
-            expected = self.song.guitars[0].get_notes(key)
+            expected = Form.GUITAR.get_notes(key)
             actual = defaultdict(set)
             for f in 'CAGED':
                 for string, note in Form.get_form_roots(key, f).items():
                     actual[string].add(note)
                     if note < 11:
                         actual[string].add(note + 12)
+            actual = {i: tuple(sorted(ns)) for i, ns in actual.items()}
             self.assertDictEqual(expected, actual)
 
-    def test_form(self):
+    def test_pentatonic_form(self):
+        """Pentatonics should have only 2 notes per string"""
         scale = scales.MinorPentatonic
         key = 'A'
         for f in 'CAGED':
             form = Form(key, scale, f)
             for string, notes in form.notes.items():
                 self.assertEqual(2, len(notes))
+
+    def test_locrian_d(self):
+        expected = {
+            1: [6, 8, 9],
+            2: [6, 8, 9],
+            3: [5, 6, 8],
+            4: [5, 6, 8],
+            5: [6, 8],
+            6: [6, 8, 9]
+        }
+        form = Form('G', scales.Locrian, 'D')
+        self.assertDictEqual(expected, form.notes)

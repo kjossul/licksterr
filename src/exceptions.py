@@ -1,0 +1,2 @@
+class FormShapeError(Exception):
+    pass
