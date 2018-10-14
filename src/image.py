@@ -36,7 +36,8 @@ class GuitarImage(Guitar):
         form = Form(key, scale, form)
         for string, ns in form.notes.items():
             for note in ns:
-                self.fill_note(self.strings[string], note, im=im)
+                color = 'red' if form.roots.get(string, None) == note else 'green'
+                self.fill_note(self.strings[string], note, color=ImageColor.getcolor(color, 'RGBA'), im=im)
         return im
 
 
