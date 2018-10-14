@@ -157,21 +157,23 @@ class Form:
         When on a string there are two notes separated by 4 frets, we need to remove one of the two, because the form
         becomes easier to play this way. If it's the left, we try to move it on lower string, else on the highest.
         """
-        for string, notes in self.notes.items():
-            l, r = min(notes), max(notes)
+        for string, ns in self.notes.items():
+            l, r = min(ns), max(ns)
             if r - l > 3:
-                if self.get_score(l) < self.get_score(r):
-                    self.notes[string].remove(l)
-                    if string != 6:
-                        n = self.GUITAR.strings[string][l]
-                        lower_string = self.GUITAR.strings[string + 1]
-                        self.notes[string + 1].add(max(lower_string.get_notes(n), key=self.get_score))
-                else:
-                    self.notes[string].remove(r)
-                    if string != 1:
-                        n = self.GUITAR.strings[string][r]
-                        higher_string = self.GUITAR.strings[string - 1]
-                        self.notes[string - 1].add(max(higher_string.get_notes(n), key=self.get_score))
+                if string != 6:
+                    n = self.GUITAR.strings[string][l]
+                    lower_string = self.GUITAR.strings[string + 1]
+                    note = max(lower_string.get_notes(n), key=self.get_score)
+                    if self.get_score(note) >= self.get_score(l):
+                        self.notes[string].remove(l)
+                        self.notes[string+1].add(note)
+                if string != 1:
+                    n = self.GUITAR.strings[string][r]
+                    higher_string = self.GUITAR.strings[string - 1]
+                    note = max(higher_string.get_notes(n), key=self.get_score)
+                    if self.get_score(note) >= self.get_score(r):
+                        self.notes[string].remove(r)
+                        self.notes[string-1].add(note)
         self.transpose()
 
     def transpose(self):
