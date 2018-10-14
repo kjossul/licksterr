@@ -81,3 +81,13 @@ class TestForm(unittest.TestCase):
         }
         form = Form('G', scales.Locrian, 'D')
         self.assertDictEqual(expected, form.notes)
+
+    def test_sum(self):
+        """By chaining two close pentatonics we should get 6 notes per string"""
+        scale = scales.MinorPentatonic
+        key = 'G'
+        f1 = Form(key, scale, 'C')
+        f2 = Form(key, scale, 'A')
+        f3 = f1 + f2
+        for ns in f3.notes.values():
+            self.assertEqual(3, len(ns))

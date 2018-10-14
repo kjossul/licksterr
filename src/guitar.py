@@ -1,3 +1,4 @@
+import copy
 from collections import defaultdict, OrderedDict
 
 import guitarpro as gp
@@ -37,26 +38,31 @@ class Guitar:
             self.measures = tuple(Measure(measure) for measure in track.measures)
         self.strings = OrderedDict({i: String(note) for i, note in enumerate(reversed(self.tuning), 1)})
 
-    def yield_sounds(self, pattern=None):
-        # todo yield only notes in particular pattern / shapes (i.e. positions on the fretboard)
+    def yield_sounds(self, ns=None):
+        ns = ns if ns else self.get_notes(scales.Chromatic('A').ascending())
         for measure in self.measures:
             for beat in measure.beats:
                 if len(beat.notes) > 1:  # if a beat contains more than one note is considered a separator
                     yield Chord(beat.chord)
+                    # todo this can be improved (e.g. 0-0 -> 3-3 can be still considered and interval)
                 elif len(beat.notes) is 1:
                     note = beat.notes[0]
-                    yield self.strings[note.string][note.value]
+                    if note.value in ns.get(note.string, {}):
+                        yield note
 
-    def calculate_intervals(self, pattern=None):
+    def calculate_intervals(self, forms=None):
+        ns = sum(form for form in forms) if forms else None
         out, prev = defaultdict(int), None
-        for sound in self.yield_sounds(pattern=pattern):
-            if isinstance(sound, Chord):
+        for sound in self.yield_sounds():
+            # if a chord is encountered or the sound is outside the box shape it is considered a stop
+            if isinstance(sound, Chord) or (ns and sound.value not in ns.notes[sound.string]):
                 prev = None
             else:
+                note = self.strings[sound.string][sound.value]
                 if prev:
-                    interval = intervals.determine(prev, sound, shorthand=True)
+                    interval = intervals.determine(prev, note, shorthand=True)
                     out[interval] += 1
-                prev = sound
+                prev = note
         return out
 
     def get_notes(self, ns):
@@ -138,7 +144,6 @@ class Form:
     GUITAR = Guitar()
 
     def __init__(self, key, scale, form):
-        """octave is the index of the octave to choose (0 means the leftmost)"""
         try:
             self.key = key
             self.scale = scale
@@ -163,7 +168,7 @@ class Form:
         # picks the first note that has a decent score to start searching for others
         if self.scale in (scales.MajorPentatonic, scales.MinorPentatonic) or \
                 self.form == 'C' and self.scale in (scales.Lydian, scales.MajorBlues):
-            min_score = -3
+            min_score = -3  # a score of -3 is a fret down in the shapes of E, C and A
         else:
             min_score = 0
         self.notes[6].append(next(note for note in candidates if self.get_score(note) >= min_score))
@@ -178,7 +183,7 @@ class Form:
                 # picks the note on the higher string that is closer to the current position of the index finger
                 higher_string_note = min(self.GUITAR.strings[i - 1].get_notes(string[note]),
                                          key=lambda x: abs(self.notes[i][0] - x))
-                # A note is too far if the pinky has to go more than 3 frets away from the finger
+                # A note is too far if the pinkie has to go more than 3 frets away from the finger
                 is_far = note - self.notes[i][0] > 3
                 if is_far:
                     # if this note is easier to get by going up a string do that
@@ -208,3 +213,19 @@ class Form:
             return {1: left, 6: left, r: right}
         else:  # C, A, D forms have just two notes
             return {l: left, r: right}
+
+    def __add__(self, other):
+        result = copy.copy(self)
+        result.roots = result.form = None
+        if self.key != other.key:
+            result.key = None
+        if self.scale != other.scale:
+            result.scale = None
+        result.notes = {i: sorted(set(self.notes[i] + other.notes[i])) for i in self.notes.keys()}
+        return result
+
+    def __radd__(self, other):
+        self.__add__(other)
+
+    def __str__(self):
+        return str(self.notes)
