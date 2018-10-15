@@ -1,7 +1,5 @@
 import copy
-import operator
 from collections import defaultdict, OrderedDict
-from functools import reduce
 
 import guitarpro as gp
 from mingus.core import intervals, scales
@@ -19,7 +17,7 @@ class Song:
 
 
 class Guitar:
-    GUITARS = {
+    GUITARS_CODES = {
         24: "Nylon string guitar",
         25: "Steel string guitar",
         26: "Jazz Electric guitar",
@@ -32,7 +30,7 @@ class Guitar:
     def __init__(self, track=None, tuning='EADGBE'):
         self.tuning = tuning
         if track:
-            if track.channel.instrument not in self.GUITARS:
+            if track.channel.instrument not in self.GUITARS_CODES:
                 raise ValueError("Track is not a guitar instrument")
             self.name = track.name
             self.is_12_stringed = track.is12StringedGuitarTrack
@@ -40,32 +38,34 @@ class Guitar:
             self.measures = tuple(Measure(measure) for measure in track.measures)
         self.strings = OrderedDict({i: String(note) for i, note in enumerate(reversed(self.tuning), 1)})
 
-    def yield_sounds(self, ns=None):
-        ns = ns if ns else self.get_notes(scales.Chromatic('A').ascending())
+    def yield_sounds(self):
         for measure in self.measures:
             for beat in measure.beats:
-                if len(beat.notes) > 1:  # if a beat contains more than one note is considered a separator
+                if beat.chord:
                     yield Chord(beat.chord)
-                    # todo this can be improved (e.g. 0-0 -> 3-3 can be still considered and interval)
-                elif len(beat.notes) is 1:
-                    note = beat.notes[0]
-                    if note.value in ns.get(note.string, {}):
-                        yield note
+                elif beat.notes:
+                    yield beat.notes
+                else:  # todo yield a pause after some time (at least one measure?) has passed
+                    pass
 
-    def calculate_intervals(self, forms=None):
-        ns = reduce(operator.add, (form for form in forms)) if forms else None
+    def calculate_intervals(self, form=None):
         out, prev = defaultdict(int), None
         for sound in self.yield_sounds():
             # if a chord is encountered or the sound is outside the box shape it is considered a stop
-            if isinstance(sound, Chord) or (ns and sound.value not in ns.notes[sound.string]):
+            if isinstance(sound, Chord) or (form and not form.includes_all(note for note in sound)):
                 prev = None
             else:
-                note = self.strings[sound.string][sound.value]
-                if prev:
-                    interval = intervals.determine(prev, note, shorthand=True)
+                curr = [self.strings[note.string][note.value] for note in
+                        sorted(sound, key=lambda note:note.string, reverse=True)]
+                for interval in self.determine_intervals(prev, curr):
                     out[interval] += 1
-                prev = note
+                prev = curr
         return out
+
+    def determine_intervals(self, notes1, notes2):
+        if not notes1 or not notes2:
+            return set()
+        return (intervals.determine(n1, n2, shorthand=True) for n1, n2 in zip(notes1, notes2))
 
     def get_notes(self, ns):
         """Returns a set of (string, fret) pairs that match with the given notes"""
@@ -215,6 +215,9 @@ class Form:
             return {1: left, 6: left, r: right}
         else:  # C, A, D forms have just two notes
             return {l: left, r: right}
+
+    def includes_all(self, ns):
+        return all(note.value in self.notes[note.string] for note in ns)
 
     def __add__(self, other):
         result = copy.copy(self)

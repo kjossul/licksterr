@@ -53,15 +53,20 @@ class TestGuitar(unittest.TestCase):
         matching = Form('G', scales.Ionian, 'E')
         wrong1 = Form('G', scales.Ionian, 'A')
         wrong2 = Form('G', scales.MajorPentatonic, 'E')
-        matching_intervals = self.song.guitars[3].calculate_intervals(forms=(matching,))
-        wrong1_intervals = self.song.guitars[3].calculate_intervals(forms=(wrong1,))
-        wrong2_intervals = self.song.guitars[3].calculate_intervals(forms=(wrong2,))
+        matching_intervals = self.song.guitars[3].calculate_intervals(form=matching)
+        wrong1_intervals = self.song.guitars[3].calculate_intervals(form=wrong1)
+        wrong2_intervals = self.song.guitars[3].calculate_intervals(form=wrong2)
         self.assertDictEqual({'b2': 2, '2': 5}, matching_intervals)
         self.assertDictEqual({}, wrong1_intervals)
         self.assertDictEqual({'2': 3}, wrong2_intervals)  # only 1-2, 2-3, 5-6
 
-    def test_interval_form_sum(self):
-        pass
+    def test_multiple_intervals(self):
+        expected_all = {'b3': 2, '3': 2, '4': 1, '#4': 1, '#3': 2}
+        self.assertDictEqual(expected_all, self.song.guitars[4].calculate_intervals())
+        expected_pentatonic = {'#3': 1, '4': 1}  # only the first slide is counted
+        form = Form('G', scales.MinorPentatonic, 'G')
+        self.assertDictEqual(expected_pentatonic, self.song.guitars[4].calculate_intervals(form=form))
+
 
 class TestForm(unittest.TestCase):
     def test_caged(self):
