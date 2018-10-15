@@ -225,7 +225,7 @@ class Form:
         return result
 
     def __radd__(self, other):
-        self.__add__(other)
+        return self.__add__(other)
 
     def __str__(self):
         return str(self.notes)

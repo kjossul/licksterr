@@ -1,9 +1,12 @@
+import operator
 import os
 import unittest
 from collections import defaultdict
+from functools import reduce
 
-from mingus.core import scales
+from mingus.core import scales, notes
 from mingus.core.keys import major_keys
+from mingus.core.mt_exceptions import NoteFormatError
 
 from src import ASSETS_FOLDER
 from src.guitar import Song, Form
@@ -89,5 +92,22 @@ class TestForm(unittest.TestCase):
         f1 = Form(key, scale, 'C')
         f2 = Form(key, scale, 'A')
         f3 = f1 + f2
+        f4 = reduce(operator.add, (f1, f2))
         for ns in f3.notes.values():
             self.assertEqual(3, len(ns))
+            self.assertDictEqual(f3.notes, f4.notes)
+
+    def test_caged_scales(self):
+        """By combining the forms together we should get all the scale notes on each string"""
+        keys = scales.Chromatic('A').ascending()[:-1]
+        for scale in Form.SUPPORTED:
+            for key in keys:
+                try:
+                    scale_notes = set(scale(key).ascending()[:-1])
+                except NoteFormatError:
+                    continue
+                s = reduce(operator.add, (Form(key, scale, form) for form in 'CAGED'))
+                for i, string in Form.GUITAR.strings.items():
+                    for n1 in scale_notes:
+                        self.assertTrue(any(notes.is_enharmonic(n1, n2)
+                                            for n2 in {string[note] for note in s.notes[i]}))
