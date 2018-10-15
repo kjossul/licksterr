@@ -1,5 +1,7 @@
 import copy
+import operator
 from collections import defaultdict, OrderedDict
+from functools import reduce
 
 import guitarpro as gp
 from mingus.core import intervals, scales
@@ -51,7 +53,7 @@ class Guitar:
                         yield note
 
     def calculate_intervals(self, forms=None):
-        ns = sum(form for form in forms) if forms else None
+        ns = reduce(operator.add, (form for form in forms)) if forms else None
         out, prev = defaultdict(int), None
         for sound in self.yield_sounds():
             # if a chord is encountered or the sound is outside the box shape it is considered a stop

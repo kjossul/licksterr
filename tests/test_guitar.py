@@ -46,9 +46,22 @@ class TestGuitar(unittest.TestCase):
 
     def test_intervals(self):
         intervals = self.song.guitars[2].calculate_intervals()
-        expected = {'2': 1, '3': 1, 'b3': 2, 'b7': 1}
+        expected = {'2': 1, '3': 1, 'b3': 2}
         self.assertDictEqual(expected, intervals)
 
+    def test_interval_form(self):
+        matching = Form('G', scales.Ionian, 'E')
+        wrong1 = Form('G', scales.Ionian, 'A')
+        wrong2 = Form('G', scales.MajorPentatonic, 'E')
+        matching_intervals = self.song.guitars[3].calculate_intervals(forms=(matching,))
+        wrong1_intervals = self.song.guitars[3].calculate_intervals(forms=(wrong1,))
+        wrong2_intervals = self.song.guitars[3].calculate_intervals(forms=(wrong2,))
+        self.assertDictEqual({'b2': 2, '2': 5}, matching_intervals)
+        self.assertDictEqual({}, wrong1_intervals)
+        self.assertDictEqual({'2': 3}, wrong2_intervals)  # only 1-2, 2-3, 5-6
+
+    def test_interval_form_sum(self):
+        pass
 
 class TestForm(unittest.TestCase):
     def test_caged(self):
@@ -99,7 +112,7 @@ class TestForm(unittest.TestCase):
 
     def test_caged_scales(self):
         """By combining the forms together we should get all the scale notes on each string"""
-        keys = scales.Chromatic('A').ascending()[:-1]
+        keys = ('A',)
         for scale in Form.SUPPORTED:
             for key in keys:
                 try:
