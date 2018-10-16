@@ -12,8 +12,16 @@ class Song:
     def __init__(self, filename, guitar_cls=None):
         guitar_cls = guitar_cls if guitar_cls else Guitar
         song = gp.parse(filename)
-        self.guitars = tuple(Guitar.from_track(GuitarTrack(track))
-                              for track in song.tracks if track.channel.instrument in GuitarTrack.GUITARS)
+        self.guitars = tuple(guitar_cls(track=track) for track in song.tracks if track.channel.instrument)
+        self.data = {
+            "album": song.album,
+            "artist": song.artist,
+            "year": song.copyright,
+            "genre": song.tempoName,
+            "title": song.title
+        }
+        self.tempo = song.tempo
+        self.key = song.key
 
 
 class Guitar:
