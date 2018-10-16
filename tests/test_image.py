@@ -18,8 +18,8 @@ class TestImage(unittest.TestCase):
     def test_fill(self):
         """Should produce an image with all circles filled in the standard color and E notes in red"""
         im = self.guitar.im.copy()
-        for string in self.guitar.strings.values():
-            for fret, note in enumerate(string.notes):
-                color = 'red' if note == 'E' else 'green'
-                self.guitar.fill_note(string, fret, ImageColor.getcolor(color, mode='RGBA'), im=im)
+        for string in self.guitar.strings:
+            for note in string.notes:
+                color = 'red' if note.name == 'E' else 'green'
+                self.guitar.fill_note(note, ImageColor.getcolor(color, mode='RGBA'), im=im)
         im.save(os.path.join(self.TEST_ASSETS, "test_fill.png"))

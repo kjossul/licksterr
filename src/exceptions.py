@@ -1,2 +1,0 @@
-class FormShapeError(Exception):
-    pass

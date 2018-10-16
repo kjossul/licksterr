@@ -1,18 +1,15 @@
-import copy
-from collections import defaultdict, OrderedDict
+import operator
+from collections import OrderedDict
+from functools import reduce
 
 import guitarpro as gp
-from mingus.core import intervals, scales
-from mingus.core import notes
-
-from src.exceptions import FormShapeError
+from mingus.core import scales, notes
 
 
 class Song:
     def __init__(self, filename, guitar_cls=None):
         guitar_cls = guitar_cls if guitar_cls else Guitar
         song = gp.parse(filename)
-        self.guitars = tuple(guitar_cls(track=track) for track in song.tracks if track.channel.instrument)
         self.data = {
             "album": song.album,
             "artist": song.artist,
@@ -22,6 +19,7 @@ class Song:
         }
         self.tempo = song.tempo
         self.key = song.key
+        self.guitars = tuple(guitar_cls(track=track) for track in song.tracks if track.channel.instrument)
 
 
 class Guitar:
@@ -43,63 +41,63 @@ class Guitar:
             self.name = track.name
             self.is_12_stringed = track.is12StringedGuitarTrack
             self.tuning = "".join(str(string)[0] for string in reversed(track.strings))
-            self.measures = tuple(Measure(measure) for measure in track.measures)
-        self.strings = OrderedDict({i: String(note) for i, note in enumerate(reversed(self.tuning), 1)})
+            self.measures = tuple(Measure(measure, self.tuning) for measure in track.measures)
+        self.strings = tuple(String(i, note) for i, note in enumerate(tuning[::-1], start=1))
 
-    def yield_sounds(self):
-        for measure in self.measures:
-            for beat in measure.beats:
-                if beat.chord:
-                    yield Chord(beat.chord)
-                elif beat.notes:
-                    yield beat.notes
-                else:  # todo yield a pause after some time (at least one measure?) has passed
-                    pass
+    def get_notes(self, notes_list):
+        """Returns a set of note objects that matches with the given notes"""
+        return {note for string in self.strings for note in string.get_notes(notes_list)}
 
-    def calculate_intervals(self, form=None):
-        out, prev = defaultdict(int), None
-        for sound in self.yield_sounds():
-            # if a chord is encountered or the sound is outside the box shape it is considered a stop
-            if isinstance(sound, Chord) or (form and not form.includes_all(note for note in sound)):
-                prev = None
-            else:
-                curr = [self.strings[note.string][note.value] for note in
-                        sorted(sound, key=lambda note:note.string, reverse=True)]
-                for interval in self.determine_intervals(prev, curr):
-                    out[interval] += 1
-                prev = curr
-        return out
 
-    def determine_intervals(self, notes1, notes2):
-        if not notes1 or not notes2:
-            return set()
-        return (intervals.determine(n1, n2, shorthand=True) for n1, n2 in zip(notes1, notes2))
+class Lick:
+    def __init__(self):
+        self.notes = []
+        self.start = self.end = None
 
-    def get_notes(self, ns):
-        """Returns a set of (string, fret) pairs that match with the given notes"""
-        ns = tuple(n for n in ns) if not isinstance(ns, str) else (ns,)
-        return {i: string.get_notes(ns) for i, string in self.strings.items()}
+    def is_subset(self, notes_list):
+        return set(self.notes).issubset(set(notes_list))
 
 
 class Measure:
-    def __init__(self, measure):
+    def __init__(self, measure, tuning):
         signature = measure.header.timeSignature
         self.time_signature = (signature.numerator, signature.denominator)
         self.marker = measure.marker.name if measure.marker else None
-        self.beats = tuple(Beat(beat) for beat in measure.voices[0].beats)  # todo handle multiple voices
+        self.beats = tuple(Beat(beat, tuning) for beat in measure.voices[0].beats)  # todo handle multiple voices
 
 
 class Beat:
-    def __init__(self, beat):
+    def __init__(self, beat, tuning):
         self.chord = Chord(beat.effect.chord) if beat.effect.chord else None
-        self.notes = tuple(Note(note) for note in beat.notes)
+        self.notes = tuple(Note(note.string, note.value, tuning[::-1][note.string - 1], note.effect)
+                           for note in beat.notes)
 
 
 class Note:
-    def __init__(self, note):
-        self.string = note.string
-        self.value = note.value
-        self.effects = note.effect
+    def __init__(self, string, fret, string_tuning, effect=None):
+        self.string = string
+        self.fret = fret
+        self.effects = effect
+        string_value = notes.note_to_int(string_tuning)
+        self.name = notes.int_to_note((string_value + fret) % 12)
+
+    def __eq__(self, other):
+        return notes.is_enharmonic(self.name, other.name)
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __hash__(self):
+        return hash(str(self.string) + str(self.fret))
+
+    def __str__(self):
+        return f"String: {self.string}. Fret: {self.fret}. Name: {self.name}"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def is_enharnmonic(self, note):
+        return notes.is_enharmonic(self.name, note)
 
 
 class Chord:
@@ -112,26 +110,28 @@ class Chord:
 class String:
     FRETS = 23
 
-    def __init__(self, note):
-        if not notes.is_valid_note(note):
-            raise ValueError(f"Note {note} is invalid.")
-        self.tuning = note
-        base = notes.note_to_int(note)
-        self.notes = tuple(notes.int_to_note((base + i) % 12) for i in range(self.FRETS))
-
-    def get_notes(self, ns):
-        ns = ns if not isinstance(ns, str) else {ns}  # allows calls with strings
-        return tuple(i for i, n1 in enumerate(self.notes) if any(notes.is_enharmonic(n1, n2) for n2 in ns))
+    def __init__(self, index, tuning):
+        if not notes.is_valid_note(tuning):
+            raise ValueError(f"Tuning {tuning} is invalid.")
+        self.index = index
+        self.tuning = tuning
+        self.notes = tuple(Note(index, fret, tuning) for fret in range(self.FRETS))
 
     def __getitem__(self, item):
-        return self.notes[item]
+        if isinstance(item, int):
+            return self.notes[item].name
+        else:
+            return tuple(note for note in self.notes if note.is_enharnmonic(item))
 
     def __str__(self):
         return f"{self.tuning}"
 
+    def get_notes(self, note_list):
+        return tuple(n1 for n1 in self.notes if any(n1.is_enharnmonic(n2) for n2 in note_list))
+
 
 class Form:
-    SUPPORTED = {
+    SUPPORTED_SCALES = {
         scales.Ionian,
         scales.Dorian,
         scales.Phrygian,
@@ -144,101 +144,106 @@ class Form:
         scales.MinorBlues,
         scales.MajorBlues
     }
-    FORMS = OrderedDict({
-        'C': {'left': 2, 'right': 5, 'width': 2},
-        'A': {'left': 5, 'right': 3, 'width': 2},
-        'G': {'left': 3, 'right': 1, 'width': 3},
-        'E': {'left': 1, 'right': 4, 'width': 2},
-        'D': {'left': 4, 'right': 2, 'width': 3},
+    _STRINGS = tuple(String(i, note) for i, note in enumerate('EBGDAE', start=1))
+    ROOT_FORMS = OrderedDict({
+        'C': (_STRINGS[1], _STRINGS[4]),
+        'A': (_STRINGS[4], _STRINGS[2]),
+        'G': (_STRINGS[2], _STRINGS[0], _STRINGS[5]),
+        'E': (_STRINGS[0], _STRINGS[5], _STRINGS[3]),
+        'D': (_STRINGS[3], _STRINGS[1]),
     })
-    GUITAR = Guitar()
 
-    def __init__(self, key, scale, form):
+    def __init__(self, key=None, scale=None, form=None):
         try:
             self.key = key
             self.scale = scale
             self.form = form
-            scale_notes = scale(key).ascending()
-            if scale not in self.SUPPORTED:
-                raise NotImplementedError(f'Supported scales: {self.SUPPORTED}')
+            self.roots = []
+            self.notes = []
+            if not key:
+                return
+            if scale not in self.SUPPORTED_SCALES:
+                raise NotImplementedError(f'Supported scales: {self.SUPPORTED_SCALES}')
         except TypeError:
             raise TypeError(f"{scale} object is not a scale defined in mingus.core.scales.")
         except AttributeError:
             raise AttributeError(f"Form {form} is invalid.")
-        try:
-            self.calculate_shape(form, key, scale_notes)
-        except FormShapeError:
-            self.calculate_shape(form, key, scale_notes, octave=1)
-
-    def calculate_shape(self, form, key, scale_notes, octave=0):
-        self.roots = self.get_form_roots(key, form, octave=octave)
-        self.notes = defaultdict(list)
-        pos = self.GUITAR.strings[6].get_notes(scale_notes)
-        candidates = (n1 for n1, n2 in zip(pos[:-1], (pos[0],) + pos[:-2]) if n2 - n1 != 1)
-        # picks the first note that has a decent score to start searching for others
-        if self.scale in (scales.MajorPentatonic, scales.MinorPentatonic) or \
-                self.form == 'C' and self.scale in (scales.Lydian, scales.MajorBlues):
-            min_score = -3  # a score of -3 is a fret down in the shapes of E, C and A
-        else:
-            min_score = 0
-        self.notes[6].append(next(note for note in candidates if self.get_score(note) >= min_score))
-        start = self.notes[6][0] + 1
-        for i, string in reversed(self.GUITAR.strings.items()):
-            if i == 1:
-                # makes the two E strings the same, including the last found note on the high string
-                self.notes[6] = self.notes[1] + [note for note in self.notes[6] if note > self.notes[1][0]]
-                self.notes[1] = self.notes[6].copy()
-                break
-            for note in (n for n in string.get_notes(scale_notes) if n >= start):
-                # picks the note on the higher string that is closer to the current position of the index finger
-                higher_string_note = min(self.GUITAR.strings[i - 1].get_notes(string[note]),
-                                         key=lambda x: abs(self.notes[i][0] - x))
-                # A note is too far if the pinkie has to go more than 3 frets away from the finger
-                is_far = note - self.notes[i][0] > 3
-                if is_far:
-                    # if this note is easier to get by going up a string do that
-                    if abs(self.notes[i][0] - higher_string_note) <= note - self.notes[i][0]:
-                        self.notes[i - 1].append(higher_string_note)
-                        start = higher_string_note + 1
-                        break
-                    else:
-                        raise FormShapeError  # can't find an easy shape, need to move up in octaves
-                else:
-                    self.notes[i].append(note)
-
-    def get_score(self, note):
-        l, r = min(self.roots.values()), max(self.roots.values())
-        return (note - l) * (r - note)
-
-    @classmethod
-    def get_form_roots(cls, key, form, octave=0):
-        """Gets all the roots for the given form and key"""
-        form = cls.FORMS[form]
-        l, r, w = form['left'], form['right'], form['width']
-        left = min(cls.GUITAR.strings[l].get_notes(key)) + octave * 12
-        right = left + w
-        if r == 1:  # G form
-            return {l: left, 1: right, 6: right}
-        elif l == 1:  # E form
-            return {1: left, 6: left, r: right}
-        else:  # C, A, D forms have just two notes
-            return {l: left, r: right}
-
-    def includes_all(self, ns):
-        return all(note.value in self.notes[note.string] for note in ns)
+        self.calculate_shape()
 
     def __add__(self, other):
-        result = copy.copy(self)
-        result.roots = result.form = None
-        if self.key != other.key:
-            result.key = None
-        if self.scale != other.scale:
-            result.scale = None
-        result.notes = {i: sorted(set(self.notes[i] + other.notes[i])) for i in self.notes.keys()}
+        result = Form()
+        if self.key == other.key and self.scale == other.scale:
+            result.key = self.key
+            result.scale = self.scale
+        result.notes = list(set(self.notes) | set(other.notes))
         return result
 
     def __radd__(self, other):
         return self.__add__(other)
 
+    def __contains__(self, note):
+        return note in self.notes
+
     def __str__(self):
         return str(self.notes)
+
+    def calculate_shape(self, octave=0):
+        self.notes = []
+        self.roots = [next(note for note in self.ROOT_FORMS[self.form][0][self.key]
+                           if 12 * octave <= note.fret < 12 * (octave + 1))]
+        self.roots.extend(note for string in self.ROOT_FORMS[self.form][1:] for note in string[self.key]
+                          if self.roots[0].fret < note.fret)
+        scale_notes = self.scale(self.key).ascending()
+        pos = self._STRINGS[5].get_notes(scale_notes)
+        # The n2.fret - n1.fret part indicates to start the search including semitones
+        candidates = (n1 for n1, n2 in zip(pos[:-1], (pos[0],) + pos[:-2]) if n2.fret - n1.fret != 1)
+        # picks the first note that has a decent score to start searching for others
+        # fixme: this hack below probably depends on other factors
+        if self.scale in (scales.MajorPentatonic, scales.MinorPentatonic) or \
+                self.form == 'C' and self.scale in (scales.Lydian, scales.MajorBlues):
+            min_score = -3  # a score of -3 is a fret down in the shapes of E, C and A
+        else:
+            min_score = 0
+        self.notes.append(next(note for note in candidates if self.get_score(note) >= min_score))
+        start = self.notes[0].fret
+        for string in reversed(self._STRINGS):
+            i = string.index
+            if i == 1:
+                # Removes notes on the low E below the one just found on the high E to keep shape symmetrical
+                while self.notes[0].fret < start:
+                    self.notes.pop(0)
+                # checks if the low e is missing a note that we found on the high E
+                removed = self.notes.pop()
+                if self.notes[0].fret != removed.fret:
+                    self.notes.insert(0, self._STRINGS[5].notes[removed.fret])
+                # Copies the remaining part of the low E in the high E
+                for note in (note for note in self.notes.copy() if note.string == 6):
+                    self.notes.append(self._STRINGS[0].notes[note.fret])
+                break
+            for note in string.get_notes(scale_notes):
+                if note.fret <= start:
+                    continue
+                # picks the note on the higher string that is closer to the current position of the index finger
+                higher_string_note = min(self._STRINGS[i - 2].get_notes((note.name,)),
+                                         key=lambda note: abs(start - note.fret))
+                # A note is too far if the pinkie has to go more than 3 frets away from the index finger
+                is_far = note.fret - start > 3
+                if is_far:
+                    # if this note is easier to get by going up a string do that
+                    if abs(start - higher_string_note.fret) <= note.fret - start:
+                        self.notes.append(higher_string_note)
+                        start = higher_string_note.fret
+                        break
+                    else:
+                        self.calculate_shape(octave=1)  # can't find an easy shape, need to move up
+                        return
+                else:
+                    self.notes.append(note)
+
+    def get_score(self, note):
+        l, r = self.roots[0].fret, self.roots[-1].fret
+        return (note.fret - l) * (r - note.fret)
+
+    @classmethod
+    def join_forms(cls, *args):
+        return reduce(operator.add, *args)
