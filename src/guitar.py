@@ -49,13 +49,29 @@ class Guitar:
         return {note for string in self.strings for note in string.get_notes(notes_list)}
 
 
-class Lick:
-    def __init__(self):
-        self.notes = []
-        self.start = self.end = None
+class String:
+    FRETS = 23
 
-    def is_subset(self, notes_list):
-        return set(self.notes).issubset(set(notes_list))
+    def __init__(self, index, tuning):
+        if not notes.is_valid_note(tuning):
+            raise ValueError(f"Tuning {tuning} is invalid.")
+        self.index = index
+        self.tuning = tuning
+        string_value = notes.note_to_int(tuning)
+        self.notes = tuple(Note(index, fret, notes.int_to_note((string_value + fret) % 12))
+                           for fret in range(self.FRETS))
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return self.notes[item].name
+        else:
+            return tuple(note for note in self.notes if note.is_enharmonic(item))
+
+    def __str__(self):
+        return f"{self.tuning}"
+
+    def get_notes(self, note_list):
+        return tuple(n1 for n1 in self.notes if any(n1.is_enharmonic(n2) for n2 in note_list))
 
 
 class Measure:
@@ -114,34 +130,25 @@ class Chord:
         self.type = getattr(chord, 'type', None)
 
 
-class String:
-    FRETS = 23
+class Lick:
+    def __init__(self, notes_list, start=None, end=None):
+        self.notes = notes_list
+        self.start = start
+        self.end = end
 
-    def __init__(self, index, tuning):
-        if not notes.is_valid_note(tuning):
-            raise ValueError(f"Tuning {tuning} is invalid.")
-        self.index = index
-        self.tuning = tuning
-        string_value = notes.note_to_int(tuning)
-        self.notes = tuple(Note(index, fret, notes.int_to_note((string_value + fret) % 12))
-                           for fret in range(self.FRETS))
-
-    def __getitem__(self, item):
-        if isinstance(item, int):
-            return self.notes[item].name
-        else:
-            return tuple(note for note in self.notes if note.is_enharmonic(item))
+    def __contains__(self, note):
+        return note in self.notes
 
     def __str__(self):
-        return f"{self.tuning}"
+        return str(self.notes)
 
-    def get_notes(self, note_list):
-        return tuple(n1 for n1 in self.notes if any(n1.is_enharmonic(n2) for n2 in note_list))
+    def is_subset(self, notes_list):
+        return set(self.notes).issubset(set(notes_list))
 
 
-class Form:
-    def __init__(self, note_list, key=None, scale=None, forms=''):
-        self.notes = note_list
+class Form(Lick):
+    def __init__(self, notes_list, key=None, scale=None, forms=''):
+        super().__init__(notes_list)
         self.key = key
         self.scale = scale
         self.forms = forms
@@ -157,12 +164,6 @@ class Form:
 
     def __radd__(self, other):
         return self.__add__(other)
-
-    def __contains__(self, note):
-        return note in self.notes
-
-    def __str__(self):
-        return str(self.notes)
 
     def to_json(self):
         note_list = tuple(json.loads(note.to_json()) for note in self.notes)
