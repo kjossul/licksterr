@@ -187,24 +187,22 @@ class Form:
     def __str__(self):
         return str(self.notes)
 
-    def calculate_shape(self, octave=0):
+    def calculate_shape(self, form_start=0):
+        """
+        Calculates the notes belonging to this shape. This is done as follows:
+        Find the notes on the 6th string belonging to the scale, and pick the first one that is on a fret >= form_start.
+        Then progressively build the scale, go to the next string if the distance between the start and the note is
+        greater than 3 frets (the pinkie would have to stretch and it's easier to get that note going down a string).
+        If by the end not all the roots are included in the form, call the function again and start on an higher fret.
+        """
         self.notes = []
-        self.roots = [next(note for note in self.ROOT_FORMS[self.form][0][self.key]
-                           if 12 * octave <= note.fret < 12 * (octave + 1))]
-        self.roots.extend(note for string in self.ROOT_FORMS[self.form][1:] for note in string[self.key]
-                          if self.roots[0].fret < note.fret)
+        self.roots = [next(note for note in self.ROOT_FORMS[self.form][0][self.key] if note.fret >= form_start)]
+        self.roots.extend(next(note for note in string[self.key] if note.fret >= self.roots[0].fret)
+                          for string in self.ROOT_FORMS[self.form][1:])
         scale_notes = self.scale(self.key).ascending()
-        pos = self._STRINGS[5].get_notes(scale_notes)
-        # The n2.fret - n1.fret part indicates to start the search including semitones
-        candidates = (n1 for n1, n2 in zip(pos[:-1], (pos[0],) + pos[:-2]) if n2.fret - n1.fret != 1)
-        # picks the first note that has a decent score to start searching for others
-        # fixme: this hack below probably depends on other factors
-        if self.scale in (scales.MajorPentatonic, scales.MinorPentatonic) or \
-                self.form == 'C' and self.scale in (scales.Lydian, scales.MajorBlues):
-            min_score = -3  # a score of -3 is a fret down in the shapes of E, C and A
-        else:
-            min_score = 0
-        self.notes.append(next(note for note in candidates if self.get_score(note) >= min_score))
+        candidates = self._STRINGS[5].get_notes(scale_notes)
+        # picks the first note that is inside the form
+        self.notes.append(next(note for note in candidates if note.fret >= form_start))
         start = self.notes[0].fret
         for string in reversed(self._STRINGS):
             i = string.index
@@ -227,18 +225,14 @@ class Form:
                 higher_string_note = min(self._STRINGS[i - 2].get_notes((note.name,)),
                                          key=lambda note: abs(start - note.fret))
                 # A note is too far if the pinkie has to go more than 3 frets away from the index finger
-                is_far = note.fret - start > 3
-                if is_far:
-                    # if this note is easier to get by going up a string do that
-                    if abs(start - higher_string_note.fret) <= note.fret - start:
-                        self.notes.append(higher_string_note)
-                        start = higher_string_note.fret
-                        break
-                    else:
-                        self.calculate_shape(octave=1)  # can't find an easy shape, need to move up
-                        return
+                if note.fret - start > 3:
+                    self.notes.append(higher_string_note)
+                    start = higher_string_note.fret
+                    break
                 else:
                     self.notes.append(note)
+        if not set(self.roots).issubset(set(self.notes)):
+            self.calculate_shape(form_start + 1)
 
     def get_score(self, note):
         l, r = self.roots[0].fret, self.roots[-1].fret

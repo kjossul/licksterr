@@ -43,7 +43,6 @@ class TestGuitar(unittest.TestCase):
         self.assertEqual('C', chord.name)
 
 
-
 class TestForm(unittest.TestCase):
 
     def test_pentatonic_form(self):
@@ -64,9 +63,23 @@ class TestForm(unittest.TestCase):
             5: [6, 8],
             6: [6, 8, 9]
         }
+        self.match_scale(d_locrian, 'G', scales.Locrian, 'D')
+
+    def test_a_locrian(self):
+        a_locrian = {
+            1: [11, 13],
+            2: [11, 13, 14],
+            3: [10, 12, 13],
+            4: [10, 11, 13],
+            5: [10, 11, 13],
+            6: [11, 13]
+        }
+        self.match_scale(a_locrian, 'G', scales.Locrian, 'A')
+
+    def match_scale(self, expected, key, scale, form):
         s = Form._STRINGS
-        expected = [s[string-1].notes[fret] for string, frets in reversed(list(d_locrian.items())) for fret in frets]
-        form = Form('G', scales.Locrian, 'D')
+        expected = [s[string - 1].notes[fret] for string, frets in reversed(list(expected.items())) for fret in frets]
+        form = Form(key, scale, form)
         self.assertListEqual(expected, form.notes)
 
     def test_sum(self):
@@ -81,7 +94,7 @@ class TestForm(unittest.TestCase):
 
     def test_caged_scales(self):
         """By combining the forms together we should get all the scale notes on each string"""
-        keys = ('A',)
+        keys = ('G',)
         for scale in Form.SUPPORTED_SCALES:
             for key in keys:
                 try:
