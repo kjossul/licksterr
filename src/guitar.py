@@ -74,16 +74,14 @@ class Beat:
 
 
 class Note:
-    def __init__(self, string, fret, string_tuning, effect=None):
+    def __init__(self, string, fret, name, effect=None):
         self.string = string
         self.fret = fret
         self.effect = effect
-        self.string_tuning = string_tuning
-        string_value = notes.note_to_int(string_tuning)
-        self.name = notes.int_to_note((string_value + fret) % 12)
+        self.name = name
 
     def __eq__(self, other):
-        return notes.is_enharmonic(self.name, other.name)
+        return self.is_enharmonic(other.name)
 
     def __ne__(self, other):
         return not self == other
@@ -97,11 +95,11 @@ class Note:
     def __repr__(self):
         return self.__str__()
 
-    def is_enharnmonic(self, note):
+    def is_enharmonic(self, note):
         return notes.is_enharmonic(self.name, note)
 
     def to_json(self):
-        return json.dumps((self.string, self.fret, self.string_tuning))
+        return json.dumps((self.string, self.fret, self.name))
 
     @classmethod
     def from_json(cls, s):
@@ -124,19 +122,21 @@ class String:
             raise ValueError(f"Tuning {tuning} is invalid.")
         self.index = index
         self.tuning = tuning
-        self.notes = tuple(Note(index, fret, tuning) for fret in range(self.FRETS))
+        string_value = notes.note_to_int(tuning)
+        self.notes = tuple(Note(index, fret, notes.int_to_note((string_value + fret) % 12))
+                           for fret in range(self.FRETS))
 
     def __getitem__(self, item):
         if isinstance(item, int):
             return self.notes[item].name
         else:
-            return tuple(note for note in self.notes if note.is_enharnmonic(item))
+            return tuple(note for note in self.notes if note.is_enharmonic(item))
 
     def __str__(self):
         return f"{self.tuning}"
 
     def get_notes(self, note_list):
-        return tuple(n1 for n1 in self.notes if any(n1.is_enharnmonic(n2) for n2 in note_list))
+        return tuple(n1 for n1 in self.notes if any(n1.is_enharmonic(n2) for n2 in note_list))
 
 
 class Form:
@@ -167,13 +167,13 @@ class Form:
     def to_json(self):
         note_list = tuple(json.loads(note.to_json()) for note in self.notes)
         data = (self.key, self.scale, self.forms)
-        return json.dumps(data+note_list)
+        return json.dumps({'info': data, 'notes': note_list})
 
     @classmethod
     def from_json(cls, s):
         data = json.loads(s)
-        note_list = tuple(Note.from_json(note_data) for note_data in data[3:])
-        return cls(note_list, *data[:2])
+        note_list = tuple(Note.from_json(note_data) for note_data in data['notes'])
+        return cls(note_list, *data['info'])
 
     @classmethod
     def join_forms(cls, *args):
