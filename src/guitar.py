@@ -35,14 +35,14 @@ class Guitar:
 
     def __init__(self, track=None, tuning='EADGBE'):
         self.tuning = tuning
+        self.strings = tuple(String(i, note) for i, note in enumerate(tuning[::-1], start=1))
         if track:
             if track.channel.instrument not in self.GUITARS_CODES:
                 raise ValueError("Track is not a guitar instrument")
             self.name = track.name
             self.is_12_stringed = track.is12StringedGuitarTrack
             self.tuning = "".join(str(string)[0] for string in reversed(track.strings))
-            self.measures = tuple(Measure(measure, self.tuning) for measure in track.measures)
-        self.strings = tuple(String(i, note) for i, note in enumerate(tuning[::-1], start=1))
+            self.measures = tuple(Measure(measure, self.strings) for measure in track.measures)
 
     def get_notes(self, notes_list):
         """Returns a set of note objects that matches with the given notes"""
@@ -57,9 +57,7 @@ class String:
             raise ValueError(f"Tuning {tuning} is invalid.")
         self.index = index
         self.tuning = tuning
-        string_value = notes.note_to_int(tuning)
-        self.notes = tuple(Note(index, fret, notes.int_to_note((string_value + fret) % 12))
-                           for fret in range(self.FRETS))
+        self.notes = tuple(Note(index, fret, self.get_note_name(fret)) for fret in range(self.FRETS))
 
     def __getitem__(self, item):
         if isinstance(item, int):
@@ -73,20 +71,25 @@ class String:
     def get_notes(self, note_list):
         return tuple(n1 for n1 in self.notes if any(n1.is_enharmonic(n2) for n2 in note_list))
 
+    def get_note_name(self, fret):
+        string_value = notes.note_to_int(self.tuning)
+        return notes.int_to_note((string_value + fret) % 12)
+
 
 class Measure:
-    def __init__(self, measure, tuning):
+    def __init__(self, measure, strings):
         signature = measure.header.timeSignature
         self.time_signature = (signature.numerator, signature.denominator)
         self.marker = measure.marker.name if measure.marker else None
-        self.beats = tuple(Beat(beat, tuning) for beat in measure.voices[0].beats)  # todo handle multiple voices
+        self.beats = tuple(Beat(beat, strings) for beat in measure.voices[0].beats)  # todo handle multiple voices
 
 
 class Beat:
-    def __init__(self, beat, tuning):
+    def __init__(self, beat, strings):
         self.chord = Chord(beat.effect.chord) if beat.effect.chord else None
-        self.notes = tuple(Note(note.string, note.value, tuning[::-1][note.string - 1], note.effect)
-                           for note in beat.notes)
+        self.notes = tuple(
+            Note(note.string, note.value, strings[note.string - 1].get_note_name(note.value), note.effect)
+            for note in beat.notes)
 
 
 class Note:
@@ -114,6 +117,11 @@ class Note:
     def is_enharmonic(self, note):
         return notes.is_enharmonic(self.name, note)
 
+    def get_octave(self):
+        """Returns the other note on the same string with the same name."""
+        fret = self.fret - 12 if self.fret >= 12 else self.fret + 12
+        return Note(self.string, fret, self.name)
+
     def to_json(self):
         return json.dumps((self.string, self.fret, self.name))
 
@@ -131,8 +139,8 @@ class Chord:
 
 
 class Lick:
-    def __init__(self, notes_list, start=None, end=None):
-        self.notes = notes_list
+    def __init__(self, notes_list=None, start=None, end=None):
+        self.notes = notes_list if notes_list else tuple()
         self.start = start
         self.end = end
 
@@ -142,16 +150,19 @@ class Lick:
     def __str__(self):
         return str(self.notes)
 
-    def is_subset(self, notes_list):
-        return set(self.notes).issubset(set(notes_list))
+    def is_subset(self, other):
+        return set(self.notes).issubset(set(other.notes))
 
 
 class Form(Lick):
-    def __init__(self, notes_list, key=None, scale=None, forms=''):
+    def __init__(self, notes_list, key=None, scale=None, forms='', transpose=False):
         super().__init__(notes_list)
         self.key = key
         self.scale = scale
         self.forms = forms
+        if transpose:
+            # Copy-pastes this shape along the fretboard. 11 is escluded because a guitar goes just up the 22th fret
+            self.notes.extend(note.get_octave() for note in self.notes.copy() if note.fret != 11)
 
     def __add__(self, other):
         note_list = tuple(set(self.notes) | set(other.notes))
@@ -164,17 +175,6 @@ class Form(Lick):
 
     def __radd__(self, other):
         return self.__add__(other)
-
-    def to_json(self):
-        note_list = tuple(json.loads(note.to_json()) for note in self.notes)
-        data = (self.key, self.scale, self.forms)
-        return json.dumps({'info': data, 'notes': note_list})
-
-    @classmethod
-    def from_json(cls, s):
-        data = json.loads(s)
-        note_list = tuple(Note.from_json(note_data) for note_data in data['notes'])
-        return cls(note_list, *data['info'])
 
     @classmethod
     def join_forms(cls, *args):

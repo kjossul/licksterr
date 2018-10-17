@@ -5,9 +5,10 @@ from collections import OrderedDict, defaultdict
 from mingus.core import scales, keys
 
 from src import ASSETS_FOLDER
-from src.guitar import Form, Lick, Chord, String
+from src.guitar import Form, Lick, Chord, String, Note
 
 ANALYSIS_FOLDER = os.path.join(ASSETS_FOLDER, "analysis")
+FORMS_DB = os.path.join(ANALYSIS_FOLDER, "forms.json")
 SUPPORTED_SCALES = frozenset((
     scales.Ionian,
     scales.Dorian,
@@ -24,38 +25,38 @@ SUPPORTED_SCALES = frozenset((
 STRINGS = tuple(String(i, note) for i, note in enumerate('EBGDAE', start=1))
 
 
-def parse_track(guitar):
+def parse_track(guitar_track):
     start, end = 1, None
-    licks = [Lick()]
+    licks = []
     chords = []
-    for i, measure in enumerate(guitar.measures):
+    current_notes = []
+    for i, measure in enumerate(guitar_track.measures):
         for beat in measure.beats:
             if beat.chord:
                 end = i
-                licks[-1].start = start
-                licks[-1].end = end
+                licks.append(Lick(current_notes, start, end))
+                current_notes.clear()
                 start = i
-                licks.append(Lick())
                 chords.append(Chord(beat.chord))
             elif beat.notes:
                 for note in beat.notes:
-                    licks[-1].notes.append(note)
+                    current_notes.append(note)
             else:  # todo consider a pause after some time (at least one measure?) has passed without notes
                 pass
-    licks[-1].start = start
-    licks[-1].end = i
+    licks.append(Lick(current_notes, start, i))
+    return licks
 
 
 def build_forms():
-    data = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))  # data[key][scale][form] = form
+    data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))  # data[key][scale][form] = notes
     for key, scale, form_name in yield_scales(scales_list=SUPPORTED_SCALES):
-        form = calculate_form(key, scale, form_name)
-        data[key][scale.__name__][form.forms] = json.loads(form.to_json())
-    with open(os.path.join(ANALYSIS_FOLDER, "forms.json"), mode='w') as f:
+        form = calculate_form(key, scale, form_name, transpose=True)
+        data[key][scale.__name__][form.forms] = [json.loads(note.to_json()) for note in form.notes]
+    with open(FORMS_DB, mode='w') as f:
         json.dump(data, f)
 
 
-def calculate_form(key, scale, form, form_start=0):
+def calculate_form(key, scale, form, form_start=0, transpose=False):
     """
     Calculates the notes belonging to this shape. This is done as follows:
     Find the notes on the 6th string belonging to the scale, and pick the first one that is on a fret >= form_start.
@@ -107,8 +108,8 @@ def calculate_form(key, scale, form, form_start=0):
             else:
                 notes_list.append(note)
     if not set(roots).issubset(set(notes_list)):
-        return calculate_form(key, scale, form, form_start=form_start + 1)
-    return Form(notes_list, key, scale.__name__, form)
+        return calculate_form(key, scale, form, form_start=form_start + 1, transpose=transpose)
+    return Form(notes_list, key, scale.__name__, form, transpose=transpose)
 
 
 def yield_scales(scales_list=tuple(scales._Scale.__subclasses__()), keys_list=None, forms='CAGED'):
@@ -119,6 +120,17 @@ def yield_scales(scales_list=tuple(scales._Scale.__subclasses__()), keys_list=No
         for key in current_keys:
             for form in forms:
                 yield (key, scale, form)
+
+
+def get_forms_dict():
+    with open(FORMS_DB) as f:
+        d = json.loads(f.read())
+        for key, scale_dict in d.items():
+            for scale, form_dict in scale_dict.items():
+                for form in form_dict.keys():
+                    notes_list = tuple(Note(*note_data) for note_data in d[key][scale][form])
+                    d[key][scale][form] = Form(notes_list, key, scale, form)
+    return d
 
 
 if __name__ == '__main__':

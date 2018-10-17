@@ -7,7 +7,7 @@ from mingus.core import scales
 from mingus.core.mt_exceptions import NoteFormatError
 
 from src import ASSETS_FOLDER
-from src.analyzer import calculate_form, SUPPORTED_SCALES, STRINGS
+from src.analyzer import calculate_form, SUPPORTED_SCALES, STRINGS, get_forms_dict, parse_track
 from src.guitar import Song
 
 
@@ -17,6 +17,7 @@ class TestGuitar(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.song = Song(os.path.join(cls.TEST_ASSETS, "test.gp5"))
+        cls.form_dict = get_forms_dict()
 
     def test_data(self):
         data = {
@@ -43,18 +44,15 @@ class TestGuitar(unittest.TestCase):
         chord = self.song.guitars[1].measures[0].beats[0].chord
         self.assertEqual('C', chord.name)
 
+    def test_form_matching(self):
+        lick = parse_track(self.song.guitars[2]).pop()
+        g_ionian_e = self.form_dict['G']['Ionian']['E']
+        g_pentatonic_e = self.form_dict['G']['MajorPentatonic']['E']
+        self.assertTrue(lick.is_subset(g_ionian_e))
+        self.assertFalse(lick.is_subset(g_pentatonic_e))
+
 
 class TestForm(unittest.TestCase):
-
-    def test_pentatonic_form(self):
-        """Pentatonics should have only 2 notes per string"""
-        scale = scales.MinorPentatonic
-        key = 'G'
-        for f in 'CAGED':
-            form = calculate_form(key, scale, f)
-            for string in range(1, 7):
-                self.assertEqual(2, len([note for note in form.notes if note.string == string]))
-
     def test_d_locrian(self):
         d_locrian = {
             1: [6, 8, 9],
