@@ -7,7 +7,8 @@ from mingus.core import scales
 from mingus.core.mt_exceptions import NoteFormatError
 
 from src import ASSETS_FOLDER
-from src.guitar import Song, Form
+from src.analyzer import calculate_form, SUPPORTED_SCALES, STRINGS
+from src.guitar import Song
 
 
 class TestGuitar(unittest.TestCase):
@@ -50,7 +51,7 @@ class TestForm(unittest.TestCase):
         scale = scales.MinorPentatonic
         key = 'G'
         for f in 'CAGED':
-            form = Form(key, scale, f)
+            form = calculate_form(key, scale, f)
             for string in range(1, 7):
                 self.assertEqual(2, len([note for note in form.notes if note.string == string]))
 
@@ -77,17 +78,16 @@ class TestForm(unittest.TestCase):
         self.match_scale(a_locrian, 'G', scales.Locrian, 'A')
 
     def match_scale(self, expected, key, scale, form):
-        s = Form._STRINGS
-        expected = [s[string - 1].notes[fret] for string, frets in reversed(list(expected.items())) for fret in frets]
-        form = Form(key, scale, form)
+        expected = [STRINGS[string - 1].notes[fret] for string, frets in reversed(list(expected.items())) for fret in frets]
+        form = calculate_form(key, scale, form)
         self.assertListEqual(expected, form.notes)
 
     def test_sum(self):
         """By chaining two close pentatonics we should get 3 notes per string"""
         scale = scales.MinorPentatonic
         key = 'G'
-        f1 = Form(key, scale, 'C')
-        f2 = Form(key, scale, 'A')
+        f1 = calculate_form(key, scale, 'C')
+        f2 = calculate_form(key, scale, 'A')
         f3 = f1 + f2
         for string in range(1, 7):
             self.assertEqual(3, len([note for note in f3.notes if note.string == string]))
@@ -95,13 +95,13 @@ class TestForm(unittest.TestCase):
     def test_caged_scales(self):
         """By combining the forms together we should get all the scale notes on each string"""
         keys = ('G',)
-        for scale in Form.SUPPORTED_SCALES:
+        for scale in SUPPORTED_SCALES:
             for key in keys:
                 try:
                     scale_notes = set(scale(key).ascending()[:-1])
                 except NoteFormatError:
                     continue
-                s = reduce(operator.add, (Form(key, scale, form) for form in 'CAGED'))
-                for string in Form._STRINGS:
+                s = reduce(operator.add, (calculate_form(key, scale, form) for form in 'CAGED'))
+                for string in STRINGS:
                     form_string_notes = set(note for note in s.notes if note.string == string.index)
-                    self.assertTrue(form_string_notes.issubset(string.get_notes((scale_notes))))
+                    self.assertTrue(form_string_notes.issubset(string.get_notes(scale_notes)))

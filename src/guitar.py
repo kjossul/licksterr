@@ -1,9 +1,9 @@
+import json
 import operator
-from collections import OrderedDict
 from functools import reduce
 
 import guitarpro as gp
-from mingus.core import scales, notes
+from mingus.core import notes
 
 
 class Song:
@@ -77,7 +77,8 @@ class Note:
     def __init__(self, string, fret, string_tuning, effect=None):
         self.string = string
         self.fret = fret
-        self.effects = effect
+        self.effect = effect
+        self.string_tuning = string_tuning
         string_value = notes.note_to_int(string_tuning)
         self.name = notes.int_to_note((string_value + fret) % 12)
 
@@ -98,6 +99,14 @@ class Note:
 
     def is_enharnmonic(self, note):
         return notes.is_enharmonic(self.name, note)
+
+    def to_json(self):
+        return json.dumps((self.string, self.fret, self.string_tuning))
+
+    @classmethod
+    def from_json(cls, s):
+        data = json.loads(s)
+        return cls(*data)
 
 
 class Chord:
@@ -131,52 +140,20 @@ class String:
 
 
 class Form:
-    SUPPORTED_SCALES = {
-        scales.Ionian,
-        scales.Dorian,
-        scales.Phrygian,
-        scales.Lydian,
-        scales.Mixolydian,
-        scales.Aeolian,
-        scales.Locrian,
-        scales.MinorPentatonic,
-        scales.MajorPentatonic,
-        scales.MinorBlues,
-        scales.MajorBlues
-    }
-    _STRINGS = tuple(String(i, note) for i, note in enumerate('EBGDAE', start=1))
-    ROOT_FORMS = OrderedDict({
-        'C': (_STRINGS[1], _STRINGS[4]),
-        'A': (_STRINGS[4], _STRINGS[2]),
-        'G': (_STRINGS[2], _STRINGS[0], _STRINGS[5]),
-        'E': (_STRINGS[0], _STRINGS[5], _STRINGS[3]),
-        'D': (_STRINGS[3], _STRINGS[1]),
-    })
-
-    def __init__(self, key=None, scale=None, form=None):
-        try:
-            self.key = key
-            self.scale = scale
-            self.form = form
-            self.roots = []
-            self.notes = []
-            if not key:
-                return
-            if scale not in self.SUPPORTED_SCALES:
-                raise NotImplementedError(f'Supported scales: {self.SUPPORTED_SCALES}')
-        except TypeError:
-            raise TypeError(f"{scale} object is not a scale defined in mingus.core.scales.")
-        except AttributeError:
-            raise AttributeError(f"Form {form} is invalid.")
-        self.calculate_shape()
+    def __init__(self, note_list, key=None, scale=None, forms=''):
+        self.notes = note_list
+        self.key = key
+        self.scale = scale
+        self.forms = forms
 
     def __add__(self, other):
-        result = Form()
-        if self.key == other.key and self.scale == other.scale:
-            result.key = self.key
-            result.scale = self.scale
-        result.notes = list(set(self.notes) | set(other.notes))
-        return result
+        note_list = tuple(set(self.notes) | set(other.notes))
+        if self.key == other.key:
+            scale = self.scale if self.scale == other.scale else None
+            forms = self.forms + other.forms if self.scale else ''
+            return Form(note_list, self.key, scale, forms)
+        else:
+            return Form(note_list)
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -187,56 +164,16 @@ class Form:
     def __str__(self):
         return str(self.notes)
 
-    def calculate_shape(self, form_start=0):
-        """
-        Calculates the notes belonging to this shape. This is done as follows:
-        Find the notes on the 6th string belonging to the scale, and pick the first one that is on a fret >= form_start.
-        Then progressively build the scale, go to the next string if the distance between the start and the note is
-        greater than 3 frets (the pinkie would have to stretch and it's easier to get that note going down a string).
-        If by the end not all the roots are included in the form, call the function again and start on an higher fret.
-        """
-        self.notes = []
-        self.roots = [next(note for note in self.ROOT_FORMS[self.form][0][self.key] if note.fret >= form_start)]
-        self.roots.extend(next(note for note in string[self.key] if note.fret >= self.roots[0].fret)
-                          for string in self.ROOT_FORMS[self.form][1:])
-        scale_notes = self.scale(self.key).ascending()
-        candidates = self._STRINGS[5].get_notes(scale_notes)
-        # picks the first note that is inside the form
-        self.notes.append(next(note for note in candidates if note.fret >= form_start))
-        start = self.notes[0].fret
-        for string in reversed(self._STRINGS):
-            i = string.index
-            if i == 1:
-                # Removes notes on the low E below the one just found on the high E to keep shape symmetrical
-                while self.notes[0].fret < start:
-                    self.notes.pop(0)
-                # checks if the low e is missing a note that we found on the high E
-                removed = self.notes.pop()
-                if self.notes[0].fret != removed.fret:
-                    self.notes.insert(0, self._STRINGS[5].notes[removed.fret])
-                # Copies the remaining part of the low E in the high E
-                for note in (note for note in self.notes.copy() if note.string == 6):
-                    self.notes.append(self._STRINGS[0].notes[note.fret])
-                break
-            for note in string.get_notes(scale_notes):
-                if note.fret <= start:
-                    continue
-                # picks the note on the higher string that is closer to the current position of the index finger
-                higher_string_note = min(self._STRINGS[i - 2].get_notes((note.name,)),
-                                         key=lambda note: abs(start - note.fret))
-                # A note is too far if the pinkie has to go more than 3 frets away from the index finger
-                if note.fret - start > 3:
-                    self.notes.append(higher_string_note)
-                    start = higher_string_note.fret
-                    break
-                else:
-                    self.notes.append(note)
-        if not set(self.roots).issubset(set(self.notes)):
-            self.calculate_shape(form_start + 1)
+    def to_json(self):
+        note_list = tuple(json.loads(note.to_json()) for note in self.notes)
+        data = (self.key, self.scale, self.forms)
+        return json.dumps(data+note_list)
 
-    def get_score(self, note):
-        l, r = self.roots[0].fret, self.roots[-1].fret
-        return (note.fret - l) * (r - note.fret)
+    @classmethod
+    def from_json(cls, s):
+        data = json.loads(s)
+        note_list = tuple(Note.from_json(note_data) for note_data in data[3:])
+        return cls(note_list, *data[:2])
 
     @classmethod
     def join_forms(cls, *args):
