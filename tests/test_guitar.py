@@ -7,8 +7,8 @@ from mingus.core import scales
 from mingus.core.mt_exceptions import NoteFormatError
 
 from src import ASSETS_FOLDER
-from src.analyzer import calculate_form, SUPPORTED_SCALES, STRINGS, get_forms_dict, parse_track
-from src.guitar import Song
+from src.analyzer import SUPPORTED_SCALES, Parser
+from src.guitar import Song, String, Form, Note
 
 
 class TestGuitar(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestGuitar(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.song = Song(os.path.join(cls.TEST_ASSETS, "test.gp5"))
-        cls.form_dict = get_forms_dict()
+        cls.parser = Parser(cls.song)
 
     def test_data(self):
         data = {
@@ -45,14 +45,25 @@ class TestGuitar(unittest.TestCase):
         self.assertEqual('C', chord.name)
 
     def test_form_matching(self):
-        lick = parse_track(self.song.guitars[2]).pop()
-        g_ionian_e = self.form_dict['G']['Ionian']['E']
-        g_pentatonic_e = self.form_dict['G']['MajorPentatonic']['E']
-        self.assertTrue(lick.is_subset(g_ionian_e))
-        self.assertFalse(lick.is_subset(g_pentatonic_e))
+        self.parser.parse_track(self.song.guitars[2])
+        g_ionian_e = self.parser.forms_db['G']['Ionian']['E']
+        g_pentatonic_e = self.parser.forms_db['G']['MajorPentatonic']['E']
+        self.assertTrue(len(self.parser.forms_result[g_ionian_e]) == 1)
+        self.assertTrue(len(self.parser.forms_result[g_pentatonic_e]) == 0)
+
+
+class TestNote(unittest.TestCase):
+    def test_ordering(self):
+        high_e = Note(6, 0, 'E')
+        low_e_1 = Note(1, 0, 'E')
+        low_e_2 = Note(1, 0, 'E')
+        self.assertLess(high_e, low_e_1)
+        self.assertEqual(low_e_1, low_e_2)
 
 
 class TestForm(unittest.TestCase):
+    STRINGS = tuple(String(i, note) for i, note in enumerate('EBGDAE', start=1))
+
     def test_d_locrian(self):
         d_locrian = {
             1: [6, 8, 9],
@@ -76,16 +87,17 @@ class TestForm(unittest.TestCase):
         self.match_scale(a_locrian, 'G', scales.Locrian, 'A')
 
     def match_scale(self, expected, key, scale, form):
-        expected = [STRINGS[string - 1].notes[fret] for string, frets in reversed(list(expected.items())) for fret in frets]
-        form = calculate_form(key, scale, form)
+        expected = [self.STRINGS[string - 1].notes[fret] for string, frets in reversed(list(expected.items()))
+                    for fret in frets]
+        form = Form.calculate_form(key, scale, form)
         self.assertListEqual(expected, form.notes)
 
     def test_sum(self):
         """By chaining two close pentatonics we should get 3 notes per string"""
         scale = scales.MinorPentatonic
         key = 'G'
-        f1 = calculate_form(key, scale, 'C')
-        f2 = calculate_form(key, scale, 'A')
+        f1 = Form.calculate_form(key, scale, 'C')
+        f2 = Form.calculate_form(key, scale, 'A')
         f3 = f1 + f2
         for string in range(1, 7):
             self.assertEqual(3, len([note for note in f3.notes if note.string == string]))
@@ -99,7 +111,7 @@ class TestForm(unittest.TestCase):
                     scale_notes = set(scale(key).ascending()[:-1])
                 except NoteFormatError:
                     continue
-                s = reduce(operator.add, (calculate_form(key, scale, form) for form in 'CAGED'))
-                for string in STRINGS:
+                s = reduce(operator.add, (Form.calculate_form(key, scale, form) for form in 'CAGED'))
+                for string in self.STRINGS:
                     form_string_notes = set(note for note in s.notes if note.string == string.index)
                     self.assertTrue(form_string_notes.issubset(string.get_notes(scale_notes)))

@@ -1,6 +1,7 @@
 import json
 import operator
-from functools import reduce
+from collections import OrderedDict
+from functools import reduce, total_ordering
 
 import guitarpro as gp
 from mingus.core import notes
@@ -92,7 +93,13 @@ class Beat:
             for note in beat.notes)
 
 
+@total_ordering
 class Note:
+    """
+    Total ordering for this class is not based on the actual pitch / frequency, but just on string / position.
+    (i.e. a note on a lower string is always < a note on a higher string)
+    """
+
     def __init__(self, string, fret, name, effect=None):
         self.string = string
         self.fret = fret
@@ -100,19 +107,19 @@ class Note:
         self.name = name
 
     def __eq__(self, other):
-        return self.is_enharmonic(other.name)
+        return self.__hash__() == other.__hash__()
 
-    def __ne__(self, other):
-        return not self == other
+    def __lt__(self, other):
+        return self.string > other.string or (self.string == other.string and self.fret < other.fret)
 
     def __hash__(self):
-        return hash(str(self.string) + str(self.fret))
+        return hash(str(self.string) + str(self.fret) + self.name)
 
     def __str__(self):
         return f"String: {self.string}. Fret: {self.fret}. Name: {self.name}"
 
     def __repr__(self):
-        return self.__str__()
+        return f"{self.string}{self.fret}{self.name}"
 
     def is_enharmonic(self, note):
         return notes.is_enharmonic(self.name, note)
@@ -150,9 +157,6 @@ class Lick:
     def __str__(self):
         return str(self.notes)
 
-    def is_subset(self, other):
-        return set(self.notes).issubset(set(other.notes))
-
 
 class Form(Lick):
     def __init__(self, notes_list, key=None, scale=None, forms='', transpose=False):
@@ -165,7 +169,7 @@ class Form(Lick):
             self.notes.extend(note.get_octave() for note in self.notes.copy() if note.fret != 11)
 
     def __add__(self, other):
-        note_list = tuple(set(self.notes) | set(other.notes))
+        note_list = tuple(sorted(set(self.notes) | set(other.notes)))
         if self.key == other.key:
             scale = self.scale if self.scale == other.scale else None
             forms = self.forms + other.forms if self.scale else ''
@@ -176,6 +180,70 @@ class Form(Lick):
     def __radd__(self, other):
         return self.__add__(other)
 
+    def __hash__(self):
+        return hash(''.join(repr(note) for note in self.notes))
+
+    def contains(self, lick):
+        return set(self.notes).issuperset(set(lick.notes))
+
     @classmethod
     def join_forms(cls, *args):
         return reduce(operator.add, *args)
+
+    @classmethod
+    def calculate_form(cls, key, scale, form, form_start=0, transpose=False):
+        """
+        Calculates the notes belonging to this shape. This is done as follows:
+        Find the notes on the 6th string belonging to the scale, and pick the first one that is on a fret >= form_start.
+        Then progressively build the scale, go to the next string if the distance between the start and the note is
+        greater than 3 frets (the pinkie would have to stretch and it's easier to get that note going down a string).
+        If by the end not all the roots are included in the form, call the function again and start on an higher fret.
+        """
+        strings = tuple(String(i, note) for i, note in enumerate('EBGDAE', start=1))
+        root_forms = OrderedDict({
+            'C': (strings[1], strings[4]),
+            'A': (strings[4], strings[2]),
+            'G': (strings[2], strings[0], strings[5]),
+            'E': (strings[0], strings[5], strings[3]),
+            'D': (strings[3], strings[1]),
+        })
+        notes_list = []
+        roots = [next(note for note in root_forms[form][0][key] if note.fret >= form_start)]
+        roots.extend(next(note for note in string[key] if note.fret >= roots[0].fret)
+                     for string in root_forms[form][1:])
+        scale_notes = scale(key).ascending()
+        candidates = strings[5].get_notes(scale_notes)
+        # picks the first note that is inside the form
+        notes_list.append(next(note for note in candidates if note.fret >= form_start))
+        start = notes_list[0].fret
+        for string in reversed(strings):
+            i = string.index
+            if i == 1:
+                # Removes notes on the low E below the one just found on the high E to keep shape symmetrical
+                while notes_list[0].fret < start:
+                    notes_list.pop(0)
+                # checks if the low e is missing a note that we found on the high E
+                removed = notes_list.pop()
+                if notes_list[0].fret != removed.fret:
+                    notes_list.insert(0, strings[5].notes[removed.fret])
+                # Copies the remaining part of the low E in the high E
+                for note in (note for note in notes_list.copy() if note.string == 6):
+                    notes_list.append(strings[0].notes[note.fret])
+                break
+            for note in string.get_notes(scale_notes):
+                if note.fret <= start:
+                    continue
+                # picks the note on the higher string that is closer to the current position of the index finger
+                higher_string_note = min(strings[i - 2].get_notes((note.name,)),
+                                         key=lambda note: abs(start - note.fret))
+                # A note is too far if the pinkie has to go more than 3 frets away from the index finger
+                if note.fret - start > 3:
+                    notes_list.append(higher_string_note)
+                    start = higher_string_note.fret
+                    break
+                else:
+                    notes_list.append(note)
+        if not set(roots).issubset(set(notes_list)):
+            return cls.calculate_form(key, scale, form, form_start=form_start + 1, transpose=transpose)
+        return cls(notes_list, key, scale.__name__, form, transpose=transpose)
+
