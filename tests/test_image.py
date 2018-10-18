@@ -3,12 +3,12 @@ import unittest
 
 from PIL import ImageColor
 
-from src import ASSETS_FOLDER
+from src import ASSETS_DIR
 from src.image import GuitarImage
 
 
 class TestImage(unittest.TestCase):
-    TEST_ASSETS = os.path.join(ASSETS_FOLDER, "tests")
+    TEST_ASSETS = os.path.join(ASSETS_DIR, "tests")
     FORMS = 'CAGED'
 
     @classmethod

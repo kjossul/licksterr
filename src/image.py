@@ -2,14 +2,14 @@ import os
 
 from PIL import Image, ImageColor
 
-from src import ASSETS_FOLDER
+from src import ASSETS_DIR
 from src.guitar import Guitar, Form
 
 
 class GuitarImage(Guitar):
     def __init__(self, track=None, tuning='EADGBE'):
         super().__init__(track=track, tuning=tuning)
-        self.im = Image.open(os.path.join(ASSETS_FOLDER, "blank_fret_board.png"))
+        self.im = Image.open(os.path.join(ASSETS_DIR, "blank_fret_board.png"))
         # The open high E string circle is at (19,15). H step: 27px. V step: 16px. 22 frets total + open strings
         for string in self.strings:
             string.positions = tuple((19 + note.fret * 27, 15 + (string.index - 1) * 16) for note in string.notes)

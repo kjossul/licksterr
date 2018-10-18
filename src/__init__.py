@@ -4,10 +4,16 @@ import logging.config
 import os
 from pathlib import Path
 
-ASSETS_FOLDER = os.path.join(Path(os.path.realpath(__file__)).parents[1], "assets")
+from flask import Flask
+
+from src.models import db
+from src.server import analysis
+
+PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
+ASSETS_DIR = PROJECT_ROOT / "assets"
 
 
-def setup_logging(path=os.path.join(ASSETS_FOLDER, 'logging.json'),
+def setup_logging(path=os.path.join(ASSETS_DIR, 'logging.json'),
                   default_level=logging.INFO, env_key='LOG_CFG', to_file=True):
     """
     Setup logging configuration
@@ -23,8 +29,21 @@ def setup_logging(path=os.path.join(ASSETS_FOLDER, 'logging.json'),
                 config['root']['handlers'] = ['console']  # keeps only console
                 config['handlers'] = {'console': config['handlers']['console']}
             else:
-                config['handlers']['info_file_handler']['filename'] = os.path.join(ASSETS_FOLDER, 'info.log')
-                config['handlers']['error_file_handler']['filename'] = os.path.join(ASSETS_FOLDER, 'error.log')
+                config['handlers']['info_file_handler']['filename'] = os.path.join(ASSETS_DIR, 'info.log')
+                config['handlers']['error_file_handler']['filename'] = os.path.join(ASSETS_DIR, 'error.log')
         logging.config.dictConfig(config)
     else:
         logging.basicConfig(level=default_level)
+
+
+def create_app(config='config'):
+    # Flask
+    app = Flask(__name__)
+    config_file = PROJECT_ROOT / config
+    app.config.from_object(config_file)
+    app.register_blueprint(analysis)
+    # Flask-SQLAlchemy
+    # app.app_context().push()
+    # db.init_app(app)
+    # db.create_all()
+    return app

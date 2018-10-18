@@ -5,10 +5,10 @@ from itertools import chain, combinations
 
 from mingus.core import scales, keys, notes
 
-from src import ASSETS_FOLDER
+from src import ASSETS_DIR
 from src.guitar import Form, Lick, Chord, Note
 
-ANALYSIS_FOLDER = os.path.join(ASSETS_FOLDER, "analysis")
+ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 FORMS_DB = os.path.join(ANALYSIS_FOLDER, "forms.json")
 SUPPORTED_SCALES = frozenset((
     scales.Ionian,
