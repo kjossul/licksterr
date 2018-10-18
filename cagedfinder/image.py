@@ -2,8 +2,8 @@ import os
 
 from PIL import Image, ImageColor
 
-from src import ASSETS_DIR
-from src.guitar import Guitar, Form
+from cagedfinder import ASSETS_DIR
+from cagedfinder.guitar import Guitar, Form
 
 
 class GuitarImage(Guitar):

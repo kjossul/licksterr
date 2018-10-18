@@ -6,8 +6,8 @@ from functools import reduce
 from mingus.core import scales
 from mingus.core.mt_exceptions import NoteFormatError
 
-from src.analyzer import SUPPORTED_SCALES, Parser
-from src.guitar import Song, String, Form, Note
+from cagedfinder.analyzer import SUPPORTED_SCALES, Parser
+from cagedfinder.guitar import Song, String, Form, Note
 from tests import TEST_ASSETS
 
 

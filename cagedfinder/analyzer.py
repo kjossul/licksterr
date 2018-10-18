@@ -2,12 +2,14 @@ import json
 import os
 from collections import defaultdict
 from itertools import chain, combinations
+from pathlib import Path
 
 from mingus.core import scales, keys, notes
 
-from src import ASSETS_DIR
-from src.guitar import Form, Lick, Chord, Note
+from cagedfinder.guitar import Form, Lick, Chord, Note
 
+PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
+ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 FORMS_DB = os.path.join(ANALYSIS_FOLDER, "forms.json")
 SUPPORTED_SCALES = frozenset((

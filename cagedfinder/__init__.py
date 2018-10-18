@@ -6,8 +6,8 @@ from pathlib import Path
 
 from flask import Flask
 
-from src.models import db
-from src.server import analysis
+from cagedfinder.models import db
+from cagedfinder.server import analysis
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
@@ -36,13 +36,15 @@ def setup_logging(path=os.path.join(ASSETS_DIR, 'logging.json'),
         logging.basicConfig(level=default_level)
 
 
-def create_app(config='config'):
+def create_app(config=None):
     # Flask
-    app = Flask(__name__)
-    app.config.from_object(config)
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_object(config if config else 'config')
+    if not config:
+        app.config.from_pyfile('config.py')
     app.register_blueprint(analysis)
     # Flask-SQLAlchemy
-    # app.app_context().push()
-    # db.init_app(app)
-    # db.create_all()
+    app.app_context().push()
+    db.init_app(app)
+    db.create_all()
     return app

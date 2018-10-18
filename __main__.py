@@ -1,4 +1,4 @@
-from src import setup_logging, create_app
+from cagedfinder import setup_logging, create_app
 
 setup_logging()
 app = create_app()

@@ -5,6 +5,7 @@ A platform that helps you find songs in order to exercise a specific scale box o
 The project goal is to parse `.gp*` files and extract information on scales and forms used inside the track.
 
 ## Dependencies
+* [Flask](http://flask.pocoo.org/) + [SqlAlchemy](https://www.sqlalchemy.org/) + [PostGreSql](https://www.postgresql.org/)
 *  [PyGuitarPro](https://github.com/Perlence/PyGuitarPro) (a Python port of 
-[AlphaTab](https://www.alphatab.net/documentation/)) to extract information from the tabs.
-* [Mingus (Python3 port + scale additions)](https://github.com/NonSvizzero/python-mingus) to handle music theory related stuff
+[AlphaTab](https://www.alphatab.net/documentation/)).
+* [Mingus (Python3 port + scale additions)](https://github.com/NonSvizzero/python-mingus) 
