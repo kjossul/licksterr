@@ -85,7 +85,6 @@ class Parser:
         matching_forms = {form for form in self.possible_forms if form.contains(lick)}
         for form in matching_forms:
             self.forms_result[form].append(lick)
-        # Check performance improvement when information on available forms is kept (i.e. comment this line)
         self.possible_forms = self.all_forms.copy()
         self.current_notes.clear()
 
