@@ -1,6 +1,7 @@
 import json
 import operator
 from collections import OrderedDict
+from fractions import Fraction
 from functools import reduce, total_ordering
 
 import guitarpro as gp
@@ -80,7 +81,7 @@ class String:
 class Measure:
     def __init__(self, measure, strings):
         signature = measure.header.timeSignature
-        self.time_signature = (signature.numerator, signature.denominator)
+        self.duration = Fraction(signature.numerator, signature.denominator.value)
         self.marker = measure.marker.name if measure.marker else None
         self.beats = tuple(Beat(beat, strings) for beat in measure.voices[0].beats)  # todo handle multiple voices
 
@@ -88,6 +89,7 @@ class Measure:
 class Beat:
     def __init__(self, beat, strings):
         self.chord = Chord(beat.effect.chord) if beat.effect.chord else None
+        self.duration = Fraction(1, beat.duration.value)
         self.notes = tuple(
             Note(note.string, note.value, strings[note.string - 1].get_note_name(note.value), note.effect)
             for note in beat.notes)
@@ -147,7 +149,7 @@ class Chord:
 
 class Lick:
     def __init__(self, notes_list=None, start=None, end=None):
-        self.notes = notes_list if notes_list else tuple()
+        self.notes = tuple(notes_list) if notes_list else tuple()
         self.start = start
         self.end = end
 
@@ -182,6 +184,9 @@ class Form(Lick):
 
     def __hash__(self):
         return hash(''.join(repr(note) for note in self.notes))
+
+    def __str__(self):
+        return f"{self.key} {self.scale} {self.forms}"
 
     def contains(self, lick):
         return set(self.notes).issuperset(set(lick.notes))

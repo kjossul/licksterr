@@ -16,8 +16,11 @@ class TestGuitar(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        cls.parser = Parser()
         cls.song = Song(os.path.join(cls.TEST_ASSETS, "test.gp5"))
-        cls.parser = Parser(cls.song)
+
+    def setUp(self):
+        self.parser.reset()
 
     def test_data(self):
         data = {
@@ -50,6 +53,11 @@ class TestGuitar(unittest.TestCase):
         g_pentatonic_e = self.parser.forms_db['G']['MajorPentatonic']['E']
         self.assertTrue(len(self.parser.forms_result[g_ionian_e]) == 1)
         self.assertTrue(len(self.parser.forms_result[g_pentatonic_e]) == 0)
+
+    def test_pause(self):
+        self.parser.parse_track(self.song.guitars[3])
+        g_ionian_e = self.parser.forms_db['G']['Ionian']['E']
+        self.assertTrue(len(self.parser.forms_result[g_ionian_e]) == 2)
 
 
 class TestNote(unittest.TestCase):
@@ -87,10 +95,10 @@ class TestForm(unittest.TestCase):
         self.match_scale(a_locrian, 'G', scales.Locrian, 'A')
 
     def match_scale(self, expected, key, scale, form):
-        expected = [self.STRINGS[string - 1].notes[fret] for string, frets in reversed(list(expected.items()))
-                    for fret in frets]
+        expected = tuple(self.STRINGS[string - 1].notes[fret] for string, frets in reversed(list(expected.items()))
+                         for fret in frets)
         form = Form.calculate_form(key, scale, form)
-        self.assertListEqual(expected, form.notes)
+        self.assertTupleEqual(expected, form.notes)
 
     def test_sum(self):
         """By chaining two close pentatonics we should get 3 notes per string"""
