@@ -4,11 +4,17 @@ from pathlib import Path
 import requests
 from flask_testing import LiveServerTestCase
 
-from cagedfinder import setup_logging, create_app
+from cagedfinder import setup_logging, create_app, db
 from tests import TEST_ASSETS
 
 
 class MyTest(LiveServerTestCase):
+    def setUp(self):
+        db.create_all()
+
+    def tearDown(self):
+        db.session.remove()
+        db.drop_all()
 
     def create_app(self):
         setup_logging(to_file=False)
