@@ -6,18 +6,17 @@ from functools import reduce
 from mingus.core import scales
 from mingus.core.mt_exceptions import NoteFormatError
 
-from src import ASSETS_DIR
 from src.analyzer import SUPPORTED_SCALES, Parser
 from src.guitar import Song, String, Form, Note
+from tests import TEST_ASSETS
 
 
 class TestGuitar(unittest.TestCase):
-    TEST_ASSETS = os.path.join(ASSETS_DIR, "tests")
 
     @classmethod
     def setUpClass(cls):
         cls.parser = Parser()
-        cls.song = Song(os.path.join(cls.TEST_ASSETS, "test.gp5"))
+        cls.song = Song(os.path.join(TEST_ASSETS, "test.gp5"))
 
     def setUp(self):
         self.parser.reset()

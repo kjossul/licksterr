@@ -4,7 +4,7 @@ from pathlib import Path
 PROJECT_DIR = Path.home() / ".caged"
 UPLOAD_DIR = Path(PROJECT_DIR) / "uploads"
 
-Path(PROJECT_DIR).mkdir(parents=True, exist_ok=True)
+Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 # DB_USER = env['DB_USER'] if 'DB_USER' in env else 'postgres'
 # DB_PASSWORD = env['DB_PASSWORD'] if 'DB_PASSWORD' in env else 'admin'
 # DB_IP = env['DB_IP'] if 'DB_IP' in env else 'localhost'

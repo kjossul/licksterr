@@ -39,8 +39,7 @@ def setup_logging(path=os.path.join(ASSETS_DIR, 'logging.json'),
 def create_app(config='config'):
     # Flask
     app = Flask(__name__)
-    config_file = PROJECT_ROOT / config
-    app.config.from_object(config_file)
+    app.config.from_object(config)
     app.register_blueprint(analysis)
     # Flask-SQLAlchemy
     # app.app_context().push()

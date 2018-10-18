@@ -2,9 +2,11 @@ import os
 from pathlib import Path
 
 TESTING = True
+DEBUG = True
 # Paths
 PROJECT_DIR = Path(os.path.realpath(__name__)).parents[0] / ".caged"
 UPLOAD_DIR = Path(PROJECT_DIR) / "uploads"
+Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 
 # DB_USER = env['DB_USER'] if 'DB_USER' in env else 'postgres'
