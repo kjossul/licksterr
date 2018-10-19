@@ -1,7 +1,9 @@
 import logging
+import re
 from enum import Enum
 
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.dialects.postgresql import ARRAY, ENUM
 
 logger = logging.getLogger(__name__)
 db = SQLAlchemy()
@@ -29,18 +31,39 @@ class FormName(Enum):
     D = 4
 
 
-class LickNote(db.Model):
-    __tablename__ = 'lick_note'
-    __table_args__ = (
-        db.ForeignKeyConstraint(('note_string', 'note_fret', 'note_value'),
-                                ('note.string', 'note.fret', 'note.value')),
-    )
-    lick_id = db.Column(db.String, db.ForeignKey('lick.id'), primary_key=True)
-    note_string = db.Column(db.Integer, primary_key=True)
-    note_fret = db.Column(db.Integer, primary_key=True)
-    note_value = db.Column(db.Integer, primary_key=True)
-    position = db.Column(db.Integer)
-    notes = db.relationship("Note")
+class Note(ENUM):
+    def __init__(self):
+        format_string = "S{:d}F{:02d}"
+        self.FRETS = 30
+        self.enums = tuple(format_string.format(string, fret)
+                           for string in range(6, 0, -1) for fret in range(0, self.FRETS))
+        super().__init__(*self.enums, name='note')
+
+    def get_value(self, string, fret):
+        i = abs(string-6) * self.FRETS + fret
+        return self.enums[i]
+
+
+
+class ArrayOfEnum(ARRAY):
+
+    def bind_expression(self, bindvalue):
+        return db.cast(bindvalue, self)
+
+    def result_processor(self, dialect, coltype):
+        super_rp = super(ArrayOfEnum, self).result_processor(
+            dialect, coltype)
+
+        def handle_raw_string(value):
+            inner = re.match(r"^{(.*)}$", value).group(1)
+            return inner.split(",") if inner else []
+
+        def process(value):
+            if value is None:
+                return None
+            return super_rp(handle_raw_string(value))
+
+        return process
 
 
 class FormLick(db.Model):
@@ -52,7 +75,7 @@ class FormLick(db.Model):
     form_key = db.Column(db.Integer, primary_key=True)
     form_scale = db.Column(db.Enum(Scale), primary_key=True)
     form_name = db.Column(db.Enum(FormName), primary_key=True)
-    lick_id = db.Column(db.String, db.ForeignKey('lick.id'), primary_key=True)
+    lick_id = db.Column(db.Integer, db.ForeignKey('lick.id'), primary_key=True)
     licks = db.relationship("Lick")
 
 
@@ -62,19 +85,15 @@ class Form(db.Model):
     key = db.Column(db.Integer, primary_key=True)
     scale = db.Column(db.Enum(Scale), primary_key=True)
     name = db.Column(db.Enum(FormName), primary_key=True)
+    notes = db.Column(ArrayOfEnum(Note), nullable=False, unique=True)
     licks = db.relationship("FormLick")
 
 
 class Lick(db.Model):
-    """
-    A lick is identified as a sequence of notes. The identifier is a string in this form:
-    ssffvvssffvv.....ssffvv, where ss refers to the string (00-12), ff to the fret (00-23) and vv to the value of the
-    note (00-11). This sequence is guaranteed to be unique
-    """
     __tablename__ = 'lick'
 
-    id = db.Column(db.String, primary_key=True)
-    notes = db.relationship("LickNote")
+    id = db.Column(db.Integer, primary_key=True)
+    notes = db.Column(ArrayOfEnum(Note), nullable=False, unique=True)
 
 
 class Song(db.Model):
@@ -87,15 +106,3 @@ class Song(db.Model):
     year = db.Column(db.Integer)
     genre = db.Column(db.String)
     tab = db.Column(db.LargeBinary)
-
-
-class Note(db.Model):
-    """
-    Value represents the int conversion of the note [0,11]. Marked as primary to identify the possibility of having
-    different tunings for the same position on the fretboard
-    """
-    __tablename__ = 'note'
-
-    string = db.Column(db.Integer, primary_key=True)
-    fret = db.Column(db.Integer, primary_key=True)
-    value = db.Column(db.Integer, primary_key=True)
