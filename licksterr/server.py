@@ -5,13 +5,10 @@ from flask import Blueprint, request, abort
 from flask import current_app as app
 from werkzeug.utils import secure_filename
 
-from licksterr.analyzer import Parser
-
 logger = logging.getLogger(__name__)
 analysis = Blueprint('analysis', __name__)
 
 ALLOWED_EXTENSIONS = {'gp3', 'gp4', 'gp5'}
-parser = Parser()
 
 
 def allowed_file(filename):
@@ -32,9 +29,3 @@ def upload_file():
     return "OK"
 
 
-@analysis.route('/status', methods=['GET'])
-def get_parser_status():
-    if len(parser.all_forms) > 400:
-        return "OK"
-    else:
-        abort(500)
