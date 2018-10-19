@@ -4,7 +4,7 @@ from flask_testing import LiveServerTestCase
 from sqlalchemy.exc import IntegrityError
 
 from licksterr import setup_logging, create_app, db
-from licksterr.models import Lick, Form, Scale
+from licksterr.models import Lick, Form, Scale, form_lick
 
 
 class MyTest(LiveServerTestCase):
@@ -41,8 +41,12 @@ class MyTest(LiveServerTestCase):
 
     def test_association_delete(self):
         db.session.add(self.form)
-        form = Form.query.get(1)
-        self.assertFalse(form.licks)
-        form.licks.append(self.lick)
-        lick = Lick.query.get(1)
-        self.assertTrue(lick)
+        self.assertFalse(self.form.licks)
+        self.form.licks.append(self.lick)
+        db.session.commit()
+        self.assertTrue(Form.query.get(1).licks)
+        self.assertTrue(db.session.query(form_lick).all())
+        db.session.delete(self.lick)
+        db.session.commit()
+        self.assertFalse(Form.query.get(1).licks)
+        self.assertFalse(db.session.query(form_lick).all())
