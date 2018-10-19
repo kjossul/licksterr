@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mingus.core import scales, keys, notes
 
-from cagedfinder.guitar import Form, Lick, Chord, Note
+from licksterr.guitar import Form, Lick, Chord, Note
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"

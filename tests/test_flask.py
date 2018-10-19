@@ -4,7 +4,7 @@ from pathlib import Path
 import requests
 from flask_testing import LiveServerTestCase
 
-from cagedfinder import setup_logging, create_app, db
+from licksterr import setup_logging, create_app, db
 from tests import TEST_ASSETS
 
 

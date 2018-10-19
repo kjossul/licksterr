@@ -5,7 +5,7 @@ from flask import Blueprint, request, abort
 from flask import current_app as app
 from werkzeug.utils import secure_filename
 
-from cagedfinder.analyzer import Parser
+from licksterr.analyzer import Parser
 
 logger = logging.getLogger(__name__)
 analysis = Blueprint('analysis', __name__)

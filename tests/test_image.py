@@ -3,7 +3,7 @@ import unittest
 
 from PIL import ImageColor
 
-from cagedfinder.image import GuitarImage
+from licksterr.image import GuitarImage
 from tests import TEST_ASSETS
 
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 from flask import Flask
 
-from cagedfinder.models import db
-from cagedfinder.server import analysis
+from licksterr.models import db
+from licksterr.server import analysis
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
