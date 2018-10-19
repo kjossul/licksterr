@@ -3,7 +3,6 @@ from enum import Enum
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.ext.associationproxy import association_proxy
 
 logger = logging.getLogger(__name__)
 db = SQLAlchemy()
@@ -47,23 +46,25 @@ class Form(NoteContainer):
     key = db.Column(db.Integer)
     scale = db.Column(db.Enum(Scale))
     name = db.Column(db.String)
-    licks = association_proxy('form_lick', 'lick', creator=lambda **kw: Lick(**kw))
+    licks = db.relationship("Lick", secondary=lambda: form_lick)
 
 
 class Lick(NoteContainer):
     __tablename__ = 'lick'
 
     unique_key = db.Column(db.String, nullable=False, unique=True)
+    forms = db.relationship("Form", secondary=lambda: form_lick)
 
     def __init__(self, **kwargs):
         note_list = kwargs['notes']
         kwargs['unique_key'] = ''.join(f"S{string}F{fret:02}" for string, fret in note_list)
         super().__init__(**kwargs)
 
+
 # Helper table for Form-Lick many-to-many relationship
-form_lick_table = db.Table('form_lick',
-                           db.Column('form_id', db.Integer, db.ForeignKey("form.id"), primary_key=True),
-                           db.Column('lick_id', db.Integer, db.ForeignKey("lick.id"), primary_key=True))
+form_lick = db.Table('form_lick',
+                     db.Column('form_id', db.Integer, db.ForeignKey("form.id"), primary_key=True),
+                     db.Column('lick_id', db.Integer, db.ForeignKey("lick.id"), primary_key=True))
 
 
 class Song(db.Model):
