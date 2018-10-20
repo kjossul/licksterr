@@ -62,7 +62,7 @@ class Lick(NoteContainer):
     # starting and ending measures
     start = db.Column(db.Integer)
     end = db.Column(db.Integer)
-    forms = db.relationship("Form", secondary=lambda: form_lick)
+    duration = db.Column(db.Float)
 
     def __init__(self, notes, **kwargs):
         kwargs['unique_key'] = ''.join(f"S{string}F{fret:02}" for string, fret in notes)
@@ -78,7 +78,6 @@ class Form(NoteContainer):
     key = db.Column(db.Integer, nullable=False)
     scale = db.Column(db.Enum(Scale), nullable=False)
     name = db.Column(db.String, nullable=False)
-    licks = db.relationship("Lick", secondary=lambda: form_lick)
 
     def __init__(self, notes, key, scale, name, transpose=False, **kwargs):
         if transpose:
@@ -168,10 +167,12 @@ class Form(NoteContainer):
         return cls(notes_list, key, scale, form, transpose=transpose)
 
 
-# Helper table for Form-Lick many-to-many relationship
-form_lick = db.Table('form_lick',
-                     db.Column('form_id', db.Integer, db.ForeignKey("form.id"), primary_key=True),
-                     db.Column('lick_id', db.Integer, db.ForeignKey("lick.id"), primary_key=True))
+class FormLickMatch(db.Model):
+    __tablename__ = 'form_lick_match'
+
+    form_id = db.Column(db.Integer, db.ForeignKey("form.id"), primary_key=True)
+    lick_id = db.Column(db.Integer, db.ForeignKey("lick.id"), primary_key=True)
+    score = db.Column(db.Float, nullable=False)
 
 
 class Song(db.Model):
@@ -184,3 +185,11 @@ class Song(db.Model):
     year = db.Column(db.Integer)
     genre = db.Column(db.String)
     tab = db.Column(db.LargeBinary)
+
+class SongLickMatch(db.Model):
+    __tablename__ = 'song_lick_match'
+
+    song_id = db.Column(db.Integer, db.ForeignKey("song.id"), primary_key=True)
+    lick_id = db.Column(db.Integer, db.ForeignKey("lick.id"), primary_key=True)
+    score = db.Column(db.Float, nullable=False)
+    # todo implement many to many between licks and song

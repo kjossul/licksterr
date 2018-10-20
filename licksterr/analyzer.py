@@ -1,12 +1,13 @@
-import json
+import logging
 import os
 from collections import defaultdict
 from pathlib import Path
 
-from mingus.core import notes
-
 from licksterr.guitar import Chord
-from licksterr.models import Form, Lick
+from licksterr.models import Form, Lick, db, FormLickMatch
+from licksterr.queries import get_notes_dict
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
@@ -15,77 +16,75 @@ FORMS_DB = os.path.join(ANALYSIS_FOLDER, "forms.json")
 
 
 class Parser:
-    def __init__(self, formsfile=FORMS_DB):
-        self.note_forms_map = defaultdict(set)  # note: {set of forms that contain this note}
-        self.all_forms = set()
-        with open(formsfile) as f:
-            self.forms_db = json.loads(f.read())  # key: {scale: {form: Form}}
-        # Parse forms database and initialize utility objects
-        for key, scale_dict in self.forms_db.items():
-            for scale, form_dict in scale_dict.items():
-                for form in form_dict.keys():
-                    notes_list = tuple((string, fret) for string, fret in self.forms_db[key][scale][form])
-                    f = Form(notes_list, key, scale, form)
-                    self.forms_db[key][scale][form] = f
-                    self.all_forms.add(f)
-                    for note in notes_list:
-                        self.note_forms_map[note].add(f)
+    def __init__(self):
+        self.note_forms_map = get_notes_dict()  # note: {set of forms that contain this note}
+        self.all_forms = set(Form.query.all())
         # Mutable objects for analysis
-        self.forms_result = defaultdict(list)  # form: [list of licks contained in this form]
-        self.chords_result = []
+        self.licks_result = defaultdict(float)  # lick: % of time that this lick occupies in the song
+        self.notes_result = defaultdict(float)  # note: % of time this note occupies in the song
+        self.chords_result = defaultdict(float)  # chord: % of time this chord is played in the song
+        # Temporary collections and values for analysis
         self.current_notes = []
-        self.possible_forms = None
-        self.notes_result = defaultdict(int)  # note: number of time this note is played
+        self.form_durations = defaultdict(float)  # form: % of overlapping between form and current lick
+        self.lick_duration = 0
+        self.measure_counter = 1
+        self.track_duration = None
 
     def parse_song(self, song):
         for guitar_track in song.guitars:
             self.parse_track(guitar_track)
 
     def parse_track(self, guitar_track):
-        start, end = 1, None
-        self.current_notes = []
-        self.possible_forms = self.all_forms.copy()
+        """
+        Iterates the track beat by beat
+        """
+        self._init_lick()
+        self.track_duration = sum(measure.duration for measure in guitar_track.measures)
         pause_duration = 0
+        i = 0
         for i, measure in enumerate(guitar_track.measures, start=1):
-            end = i
             for beat in measure.beats:
                 if not beat.notes:
                     pause_duration += beat.duration
-                    if pause_duration >= measure.duration and self.current_notes:
-                        self.insert_lick(start, end)
-                        start = i
+                    if pause_duration >= measure.duration:
+                        self._add_lick(i)
                     continue
                 pause_duration = 0
+                notes_length = beat.duration / self.track_duration
                 if beat.chord:
-                    self.insert_lick(start, end)
-                    start = i
-                    self.chords_result.append(Chord(beat.chord))
+                    self._add_lick(i)
+                    self.chords_result[Chord(beat.chord)] += notes_length
                 else:
+                    # Updates duration of objects
+                    self.lick_duration += notes_length
                     for note in beat.notes:
-                        self.possible_forms.intersection_update(self.note_forms_map[note])
                         self.current_notes.append(note)
-                        self.notes_result[note] += 1
-        self.insert_lick(start, end)
+                        self.notes_result[note] += notes_length
+                        for form in self.note_forms_map[note]:
+                            self.form_durations[form] += notes_length
 
-    def insert_lick(self, start, end):
+        self._add_lick(i)
+        db.session.commit()
+
+    def _add_lick(self, current_measure):
         if not self.current_notes:
             return
-        lick = Lick(self.current_notes, start=start, end=end)
-        matching_forms = {form for form in self.possible_forms if form.contains(lick)}
-        for form in matching_forms:
-            self.forms_result[form].append(lick)
-        self.possible_forms = self.all_forms.copy()
+        lick = Lick(self.current_notes, start=self.measure_counter, end=current_measure, duration=self.lick_duration)
+        db.session.add(lick)
+        for form, duration in self.form_durations.items():
+            score = duration / self.lick_duration
+            match = FormLickMatch(form_id=form.id, lick_id=lick.id, score=score)
+            db.session.add(match)
+        self._init_lick(current_measure)
+
+    def _init_lick(self, current_measure=1):
         self.current_notes.clear()
+        self.form_durations = defaultdict(float)
+        self.lick_duration = 0
+        self.measure_counter = current_measure
 
-    def get_likely_keys(self):
-        """Returns a list of integers representing the int values of the notes that were played the most"""
-        result = defaultdict(int)
-        for note, played in self.notes_result.items():
-            result[notes.note_to_int(note.name)] += played
-        return sorted(result.values(), key=result.get)
-
-    def reset(self):
-        self.forms_result.clear()
+    def _init_parser(self):
+        self.licks_result.clear()
         self.notes_result.clear()
         self.chords_result.clear()
 

@@ -4,7 +4,7 @@ from flask_testing import LiveServerTestCase
 from sqlalchemy.exc import IntegrityError
 
 from licksterr import setup_logging, create_app, db
-from licksterr.models import Lick, Form, Scale, form_lick
+from licksterr.models import Lick, Form, Scale
 from licksterr.queries import init_forms
 
 
@@ -40,17 +40,6 @@ class TestDatabase(LiveServerTestCase):
         with self.assertRaises(IntegrityError):
             db.session.commit()
 
-    def test_association_delete(self):
-        db.session.add(self.form)
-        self.assertFalse(self.form.licks)
-        self.form.licks.append(self.lick)
-        db.session.commit()
-        self.assertTrue(Form.query.get(1).licks)
-        self.assertTrue(db.session.query(form_lick).all())
-        db.session.delete(self.lick)
-        db.session.commit()
-        self.assertFalse(Form.query.get(1).licks)
-        self.assertFalse(db.session.query(form_lick).all())
 
     def test_form_init(self):
         init_forms()

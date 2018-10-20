@@ -19,7 +19,7 @@ class TestGuitar(unittest.TestCase):
         cls.song = Song(os.path.join(TEST_ASSETS, "test.gp5"))
 
     def setUp(self):
-        self.parser.reset()
+        self.parser._init_parser()
 
     def test_data(self):
         data = {

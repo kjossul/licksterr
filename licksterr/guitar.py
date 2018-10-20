@@ -99,3 +99,6 @@ class Chord:
         self.name = getattr(chord, 'name', None)
         self.strings = getattr(chord, 'strings', None)
         self.type = getattr(chord, 'type', None)
+
+    def __hash__(self):
+        return hash(self.name)

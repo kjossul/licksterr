@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from itertools import combinations, chain
 
 from mingus.core import keys
@@ -29,3 +30,13 @@ def yield_scales(scales_list=SCALES_DICT.keys(), keys_list=None):
             current_keys = keys.minor_keys if scale.type == 'minor' else keys.major_keys
         for key in current_keys[2:-1]:
             yield key, scale
+
+
+def get_notes_dict():
+    """
+    Returns a dictionary of (string, fret): {set of forms that contain this note}
+    """
+    notes_dict = defaultdict(set)
+    for form in Form.query.all():
+        for string, fret in form.notes:
+            notes_dict[(string, fret)].add(form)
