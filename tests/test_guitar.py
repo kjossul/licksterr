@@ -7,7 +7,7 @@ from mingus.core import scales
 from mingus.core.mt_exceptions import NoteFormatError
 
 from licksterr.analyzer import SUPPORTED_SCALES, Parser
-from licksterr.guitar import Song, String, Form, Note
+from licksterr.guitar import Song, String, Form
 from tests import TEST_ASSETS
 
 
@@ -40,7 +40,7 @@ class TestGuitar(unittest.TestCase):
     def test_notes(self):
         beat = self.song.guitars[0].measures[0].beats[0]
         # all strings are strummed on zero exactly once
-        self.assertTrue(all(note.fret == 0 for note in beat.notes))
+        self.assertTrue(all(note[1] == 0 for note in beat.notes))
 
     def test_chords(self):
         chord = self.song.guitars[1].measures[0].beats[0].chord
@@ -59,20 +59,11 @@ class TestGuitar(unittest.TestCase):
         self.assertTrue(len(self.parser.forms_result[g_ionian_e]) == 2)
 
 
-class TestNote(unittest.TestCase):
-    def test_ordering(self):
-        high_e = Note(6, 0, 'E')
-        low_e_1 = Note(1, 0, 'E')
-        low_e_2 = Note(1, 0, 'E')
-        self.assertLess(high_e, low_e_1)
-        self.assertEqual(low_e_1, low_e_2)
-
-
 class TestForm(unittest.TestCase):
-    STRINGS = tuple(String(i, note) for i, note in enumerate('EBGDAE', start=1))
+    STRINGS = tuple(String(tuning) for tuning in 'EBGDAE')
 
-    def test_d_locrian(self):
-        d_locrian = {
+    def test_g_locrian_d(self):
+        expected = {
             1: [6, 8, 9],
             2: [6, 8, 9],
             3: [5, 6, 8],
@@ -80,10 +71,10 @@ class TestForm(unittest.TestCase):
             5: [6, 8],
             6: [6, 8, 9]
         }
-        self.match_scale(d_locrian, 'G', scales.Locrian, 'D')
+        self.match_scale(expected, 'G', scales.Locrian, 'D')
 
-    def test_a_locrian(self):
-        a_locrian = {
+    def test_g_locrian_a(self):
+        expected = {
             1: [11, 13],
             2: [11, 13, 14],
             3: [10, 12, 13],
@@ -91,23 +82,32 @@ class TestForm(unittest.TestCase):
             5: [10, 11, 13],
             6: [11, 13]
         }
-        self.match_scale(a_locrian, 'G', scales.Locrian, 'A')
+        self.match_scale(expected, 'G', scales.Locrian, 'A')
+
+    def test_db_aeolian_d(self):
+        expected = {
+            1: [11, 12, 14],
+            2: [12, 14],
+            3: [11, 13, 14],
+            4: [11, 13, 14],
+            5: [11, 12, 14],
+            6: [11, 12, 14]
+        }
+        self.match_scale(expected, 'Db', scales.Aeolian, 'D')
 
     def match_scale(self, expected, key, scale, form):
-        expected = tuple(self.STRINGS[string - 1].notes[fret] for string, frets in reversed(list(expected.items()))
-                         for fret in frets)
-        form = Form.calculate_form(key, scale, form)
+        expected = tuple((string, fret) for string, frets in reversed(list(expected.items())) for fret in frets)
+        form = Form.calculate_caged_form(key, scale, form)
         self.assertTupleEqual(expected, form.notes)
 
     def test_sum(self):
         """By chaining two close pentatonics we should get 3 notes per string"""
         scale = scales.MinorPentatonic
         key = 'G'
-        f1 = Form.calculate_form(key, scale, 'C')
-        f2 = Form.calculate_form(key, scale, 'A')
+        f1 = Form.calculate_caged_form(key, scale, 'C')
+        f2 = Form.calculate_caged_form(key, scale, 'A')
         f3 = f1 + f2
-        for string in range(1, 7):
-            self.assertEqual(3, len([note for note in f3.notes if note.string == string]))
+        self.assertEqual(3 * 6, len(f3.notes))
 
     def test_caged_scales(self):
         """By combining the forms together we should get all the scale notes on each string"""
@@ -118,7 +118,8 @@ class TestForm(unittest.TestCase):
                     scale_notes = set(scale(key).ascending()[:-1])
                 except NoteFormatError:
                     continue
-                s = reduce(operator.add, (Form.calculate_form(key, scale, form) for form in 'CAGED'))
-                for string in self.STRINGS:
-                    form_string_notes = set(note for note in s.notes if note.string == string.index)
-                    self.assertTrue(form_string_notes.issubset(string.get_notes(scale_notes)))
+                sum_form = reduce(operator.add, (Form.calculate_caged_form(key, scale, form, transpose=True)
+                                                 for form in 'CAGED'))
+                for i, string in enumerate(self.STRINGS, start=1):
+                    form_string_notes = tuple(fret for s, fret in sum_form.notes if s == i)
+                    self.assertTupleEqual(string.get_notes(scale_notes), form_string_notes)

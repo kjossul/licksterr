@@ -6,7 +6,7 @@ from pathlib import Path
 
 from mingus.core import scales, keys, notes
 
-from licksterr.guitar import Form, Lick, Chord, Note
+from licksterr.guitar import Form, Lick, Chord
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
@@ -37,7 +37,7 @@ class Parser:
         for key, scale_dict in self.forms_db.items():
             for scale, form_dict in scale_dict.items():
                 for form in form_dict.keys():
-                    notes_list = tuple(Note(*note_data) for note_data in self.forms_db[key][scale][form])
+                    notes_list = tuple((string, fret) for string, fret in self.forms_db[key][scale][form])
                     f = Form(notes_list, key, scale, form)
                     self.forms_db[key][scale][form] = f
                     self.all_forms.add(f)
@@ -108,13 +108,12 @@ def build_forms():
     for key, scale in yield_scales(scales_list=SUPPORTED_SCALES):
         current_forms = {}
         for form_name in 'CAGED':
-            current_forms[form_name] = Form.calculate_form(key, scale, form_name, transpose=True)
-            data[key][scale.__name__][form_name] = [json.loads(note.to_json())
-                                                    for note in current_forms[form_name].notes]
+            current_forms[form_name] = Form.calculate_caged_form(key, scale, form_name, transpose=True)
+            data[key][scale.__name__][form_name] = current_forms[form_name].notes
         # Stores also all the possible combinations of each form
         for combo in chain.from_iterable(combinations('CAGED', i) for i in range(2, 6)):
             combo_form = Form.join_forms(current_forms[form] for form in combo)
-            data[key][scale.__name__][combo_form.forms] = [json.loads(note.to_json()) for note in combo_form.notes]
+            data[key][scale.__name__][combo_form.forms] = combo_form.notes
     with open(FORMS_DB, mode='w') as f:
         json.dump(data, f)
 

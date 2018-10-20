@@ -22,6 +22,8 @@ class Scale(Enum):
     MAJOR_BLUES = 10
 
 
+
+
 class NoteContainer(db.Model):
     __abstract__ = True
     id = db.Column(db.Integer, primary_key=True)
@@ -63,10 +65,8 @@ class Lick(NoteContainer):
 
 # Helper table for Form-Lick many-to-many relationship
 form_lick = db.Table('form_lick',
-                     db.Column('form_id', db.Integer, db.ForeignKey("form.id", ondelete="CASCADE", onupdate="CASCADE"),
-                               primary_key=True),
-                     db.Column('lick_id', db.Integer, db.ForeignKey("lick.id", ondelete="CASCADE", onupdate="CASCADE"),
-                               primary_key=True))
+                     db.Column('form_id', db.Integer, db.ForeignKey("form.id"), primary_key=True),
+                     db.Column('lick_id', db.Integer, db.ForeignKey("lick.id"), primary_key=True))
 
 
 class Song(db.Model):

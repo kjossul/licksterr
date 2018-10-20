@@ -11,21 +11,20 @@ class GuitarImage(Guitar):
         super().__init__(track=track, tuning=tuning)
         self.im = Image.open(os.path.join(ASSETS_DIR, "blank_fret_board.png"))
         # The open high E string circle is at (19,15). H step: 27px. V step: 16px. 22 frets total + open strings
-        for string in self.strings:
-            string.positions = tuple((19 + note.fret * 27, 15 + (string.index - 1) * 16) for note in string.notes)
+        for i, string in enumerate(self.strings[1:]):
+            string.positions = tuple((19 + j * 27, 15 + i * 16) for j in range(23))
 
     def fill_scale_position(self, key, scale, form, im=None):
         # todo make color pattern for scale degrees customizable
         im = im if im else self.im
         form = Form(key, scale, form)
-        for note in form.notes:
-            color = 'red' if note in form.roots else 'green'
-            self.fill_note(note, color=ImageColor.getcolor(color, 'RGBA'), im=im)
+        for string, fret in form.notes:
+            color = 'red' if fret in self.strings[string][form.key] else 'green'
+            self.fill_note(self.strings[string], fret, color=ImageColor.getcolor(color, 'RGBA'), im=im)
         return im
 
-    def fill_note(self, note, color=None, im=None):
-        string = self.strings[note.string - 1]
-        self.fill_circle(string.positions[note.fret], color=color, im=im)
+    def fill_note(self, string, fret, color=None, im=None):
+        self.fill_circle(string.positions[fret], color=color, im=im)
 
     def fill_circle(self, xy, color=None, im=None):
         """Fills the area around the dot until it founds the borders"""
