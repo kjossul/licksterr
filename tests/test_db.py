@@ -5,9 +5,10 @@ from sqlalchemy.exc import IntegrityError
 
 from licksterr import setup_logging, create_app, db
 from licksterr.models import Lick, Form, Scale, form_lick
+from licksterr.queries import init_forms
 
 
-class MyTest(LiveServerTestCase):
+class TestDatabase(LiveServerTestCase):
     def setUp(self):
         db.create_all()
         self.notes = [[1, 1]]
@@ -50,3 +51,8 @@ class MyTest(LiveServerTestCase):
         db.session.commit()
         self.assertFalse(Form.query.get(1).licks)
         self.assertFalse(db.session.query(form_lick).all())
+
+    def test_form_init(self):
+        init_forms()
+        forms = Form.query.all()
+        self.assertEqual(len(Scale) * 12 * 31, len(forms))

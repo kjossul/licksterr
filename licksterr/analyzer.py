@@ -1,30 +1,17 @@
 import json
 import os
 from collections import defaultdict
-from itertools import chain, combinations
 from pathlib import Path
 
-from mingus.core import scales, keys, notes
+from mingus.core import notes
 
-from licksterr.guitar import Form, Lick, Chord
+from licksterr.guitar import Chord
+from licksterr.models import Form, Lick
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 FORMS_DB = os.path.join(ANALYSIS_FOLDER, "forms.json")
-SUPPORTED_SCALES = frozenset((
-    scales.Ionian,
-    scales.Dorian,
-    scales.Phrygian,
-    scales.Lydian,
-    scales.Mixolydian,
-    scales.Aeolian,
-    scales.Locrian,
-    scales.MinorPentatonic,
-    scales.MajorPentatonic,
-    scales.MinorBlues,
-    scales.MajorBlues
-))
 
 
 class Parser:
@@ -83,7 +70,7 @@ class Parser:
     def insert_lick(self, start, end):
         if not self.current_notes:
             return
-        lick = Lick(self.current_notes, start, end)
+        lick = Lick(self.current_notes, start=start, end=end)
         matching_forms = {form for form in self.possible_forms if form.contains(lick)}
         for form in matching_forms:
             self.forms_result[form].append(lick)
@@ -103,29 +90,5 @@ class Parser:
         self.chords_result.clear()
 
 
-def build_forms():
-    data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))  # data[key][scale][form] = notes
-    for key, scale in yield_scales(scales_list=SUPPORTED_SCALES):
-        current_forms = {}
-        for form_name in 'CAGED':
-            current_forms[form_name] = Form.calculate_caged_form(key, scale, form_name, transpose=True)
-            data[key][scale.__name__][form_name] = current_forms[form_name].notes
-        # Stores also all the possible combinations of each form
-        for combo in chain.from_iterable(combinations('CAGED', i) for i in range(2, 6)):
-            combo_form = Form.join_forms(current_forms[form] for form in combo)
-            data[key][scale.__name__][combo_form.forms] = combo_form.notes
-    with open(FORMS_DB, mode='w') as f:
-        json.dump(data, f)
-
-
-def yield_scales(scales_list=tuple(scales._Scale.__subclasses__()), keys_list=None):
-    for scale in scales_list:
-        current_keys = keys_list
-        if not current_keys:
-            current_keys = keys.minor_keys if scale.type == 'minor' else keys.major_keys
-        for key in current_keys:
-            yield key, scale
-
-
 if __name__ == '__main__':
-    build_forms()
+    pass
