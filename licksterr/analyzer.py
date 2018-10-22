@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
-FORMS_DB = os.path.join(ANALYSIS_FOLDER, "forms.json")
 
 
 def parse_song(filename):
@@ -28,7 +27,7 @@ def parse_song(filename):
         29: "Overdrive guitar",
         30: "Distortion guitar"
     }
-    song = gp.parse(filename)
+    song = gp.parse(str(ASSETS_DIR / filename))
     data = {
         "album": song.album,
         "artist": song.artist,
@@ -38,9 +37,10 @@ def parse_song(filename):
     }
     s = Song(**data)
     db.session.add(s)
-    tracks = tuple(parse_track(s, track) for track in song.tracks
-                   if getattr(track.channel, 'instrument', None) in GUITARS_CODES)
-    s.tracks.extend(tracks)
+    for track in song.tracks:
+        if getattr(track.channel, 'instrument', None) in GUITARS_CODES:
+            t = parse_track(s, track)
+            s.tracks.append(t)
     db.session.commit()
 
 
@@ -54,9 +54,7 @@ def parse_track(song, track):
     note_match = defaultdict(float)  # note: % of time this note occupies in the track
     for measure in track.measures:
         beats, durations = [], []
-        if len(measure.voices > 1):
-            raise NotImplementedError("Multiple voices not yet supported")
-        for beat in measure.voices[0].beats:
+        for beat in measure.voices[0].beats:  # fixme handle multiple voices
             beat = Beat.get_or_create(beat)
             beats.append(beat)
             # Updates duration of objects

@@ -3,10 +3,11 @@ import os
 from PIL import Image, ImageColor
 
 from licksterr import ASSETS_DIR
+from licksterr.models import String, Form, STANDARD_TUNING
 
 
 class GuitarImage:
-    def __init__(self, track=None, tuning='EADGBE'):
+    def __init__(self, tuning=STANDARD_TUNING):
         self.strings = (None,) + tuple(String(note) for note in tuning[::-1])
         self.im = Image.open(os.path.join(ASSETS_DIR, "blank_fret_board.png"))
         # The open high E string circle is at (19,15). H step: 27px. V step: 16px. 22 frets total + open strings
@@ -16,10 +17,10 @@ class GuitarImage:
     def fill_scale_position(self, key, scale, form, im=None):
         # todo make color pattern for scale degrees customizable
         im = im if im else self.im
-        form = Form(key, scale, form)
-        for string, fret in form.notes:
-            color = 'red' if fret in self.strings[string][form.key] else 'green'
-            self.fill_note(self.strings[string], fret, color=ImageColor.getcolor(color, 'RGBA'), im=im)
+        form = Form.get(key, scale, form)
+        for note in form.notes:
+            color = 'red' if note.fret in self.strings[note.string][form.key] else 'green'
+            self.fill_note(self.strings[note.string], note.fret, color=ImageColor.getcolor(color, 'RGBA'), im=im)
         return im
 
     def fill_note(self, string, fret, color=None, im=None):

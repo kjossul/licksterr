@@ -8,11 +8,11 @@ PROJECT_DIR = Path(os.path.realpath(__name__)).parents[0] / ".caged"
 UPLOAD_DIR = Path(PROJECT_DIR) / "uploads"
 Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
-
-DB_USER = 'caged-test'
+# This db is already initiated with notes and forms (since they take almost 30s to compute)
+DB_USER = 'licksterr-test-init'
 DB_PASSWORD = 'test'
 DB_IP = 'localhost'
 DB_PORT = 5432
-DB_DB = 'caged-test'
+DB_DB = 'licksterr-test-init'
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 SQLALCHEMY_DATABASE_URI = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_IP}:{DB_PORT}/{DB_DB}"

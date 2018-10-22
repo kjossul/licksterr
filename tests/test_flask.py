@@ -1,27 +1,11 @@
-import logging
 from pathlib import Path
 
 import requests
-from flask_testing import LiveServerTestCase
 
-from licksterr import setup_logging, create_app, db
-from tests import TEST_ASSETS
+from tests import TEST_ASSETS, LicksterrTest
 
 
-class MyTest(LiveServerTestCase):
-    def setUp(self):
-        db.create_all()
-
-    def tearDown(self):
-        db.session.remove()
-        db.drop_all()
-
-    def create_app(self):
-        setup_logging(to_file=False)
-        app = create_app(config='tests.config')
-        self.logger = logging.getLogger(__name__)
-        return app
-
+class FlaskTest(LicksterrTest):
     def test_file_upload(self):
         url = self.get_server_url() + "/upload"
         filename = Path(TEST_ASSETS) / "test.gp5"

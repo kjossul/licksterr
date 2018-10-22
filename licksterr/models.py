@@ -80,7 +80,9 @@ class Song(db.Model):
     tempo = db.Column(db.Integer)
     year = db.Column(db.Integer)
     tracks = db.relationship('Track')
-    tab = db.Column(db.LargeBinary)
+
+    def __str__(self):
+        return f"{self.artist} - {self.title}"
 
 
 class Track(db.Model):
@@ -122,6 +124,10 @@ class Form(db.Model):
 
     def __str__(self):
         return f"{self.key} {self.scale} {self.forms}"
+
+    @classmethod
+    def get(cls, key, scale, name):
+        return cls.query.filter_by(key=key, scale=scale, name=name).first()
 
     @classmethod
     def calculate_caged_form(cls, key, scale, form, form_start=0, transpose=False):
@@ -198,12 +204,11 @@ class Measure(db.Model):
             measure = Measure(id=id)
             form_match = defaultdict(float)  # % of duration a form occupies in this measure
             total_duration = 0
-            for beat, duration in beats:
-                association = MeasureBeat(measure=measure, beat=beat)
-                db.session.add(association)
+            for beat in beats:
+                db.session.add(MeasureBeat(measure=measure, beat=beat))
                 total_duration = Fraction(1 / beat.duration)
                 if beat.notes:
-                    containing_forms = {beat.notes[0].forms}
+                    containing_forms = {*beat.notes[0].forms}
                     for note in beat.notes[1:]:
                         matching_forms = {form for form in note.forms if form.tuning == tuning}
                         containing_forms.intersection_update(matching_forms)
@@ -218,20 +223,23 @@ class Measure(db.Model):
 class Beat(db.Model):
     __tablename__ = 'beat'
 
-    id = db.Column(db.String(39), primary_key=True)
+    id = db.Column(db.String(39), primary_key=True)  # 39 max length (6 notes * 6 ('SxFyyP') + 3 ('Dzz')
     duration = db.Column(db.Integer, nullable=False)  # duration of the note(s) (1 - whole, 2 - half, ...)
     notes = association_proxy('beat_note', 'note')
 
     @classmethod
     def get_or_create(cls, beat):
-        if len(notes) > 6:
+        if len(beat.notes) > 6:
             raise ValueError("Can't have more than two notes per string!")
-        notes_id = ''.join(repr(note) for note in sorted(beat.notes, key=lambda note: (note.string, note.fret)))
-        id = notes_id + f'D{beat.duration.value:02}'
-        b = Beat.get(id)
+        notes = tuple(Note.get(note.string, note.value)
+                      for note in sorted(beat.notes, key=lambda note: (note.string, note.value)))
+        id = ''.join(repr(note) for note in notes) + f'D{beat.duration.value:02}'
+        b = Beat.query.get(id)
         if not b:
-            b = Beat(id=id, notes=notes, duration=beat.duration.value)
+            b = Beat(id=id, duration=beat.duration.value)
             db.session.add(b)
+            for note in notes:
+                db.session.add(BeatNote(beat=b, note=note))
             db.session.commit()
         return b
 
@@ -263,7 +271,6 @@ class TrackMeasure(db.Model):
 
     track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
-    order = db.Column(db.Integer, primary_key=True)
     # % that this measure occupies in the track
     match = db.Column(db.Float)
 
@@ -311,7 +318,7 @@ class FormNote(db.Model):
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
     # relationships
     form = db.relationship('Form', backref=db.backref('form_note', cascade='all, delete-orphan'))
-    note = db.relationship('Note')
+    note = db.relationship('Note', backref=db.backref('form_note', cascade='all, delete-orphan'))
 
 
 class BeatNote(db.Model):
