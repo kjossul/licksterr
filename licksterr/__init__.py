@@ -6,7 +6,8 @@ from pathlib import Path
 
 from flask import Flask
 
-from licksterr.models import db
+from licksterr.models import db, Form
+from licksterr.queries import init_db
 from licksterr.server import analysis
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
@@ -31,6 +32,7 @@ def setup_logging(path=os.path.join(ASSETS_DIR, 'logging.json'),
             else:
                 config['handlers']['info_file_handler']['filename'] = os.path.join(ASSETS_DIR, 'info.log')
                 config['handlers']['error_file_handler']['filename'] = os.path.join(ASSETS_DIR, 'error.log')
+            config['root']['level'] = 'INFO' if default_level == logging.INFO else 'DEBUG'
         logging.config.dictConfig(config)
     else:
         logging.basicConfig(level=default_level)
@@ -47,4 +49,6 @@ def create_app(config=None):
     app.app_context().push()
     db.init_app(app)
     db.create_all()
+    if not len(Form.query.all()):
+        init_db()
     return app

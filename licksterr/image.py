@@ -3,12 +3,11 @@ import os
 from PIL import Image, ImageColor
 
 from licksterr import ASSETS_DIR
-from licksterr.guitar import Guitar, Form
 
 
-class GuitarImage(Guitar):
+class GuitarImage:
     def __init__(self, track=None, tuning='EADGBE'):
-        super().__init__(track=track, tuning=tuning)
+        self.strings = (None,) + tuple(String(note) for note in tuning[::-1])
         self.im = Image.open(os.path.join(ASSETS_DIR, "blank_fret_board.png"))
         # The open high E string circle is at (19,15). H step: 27px. V step: 16px. 22 frets total + open strings
         for i, string in enumerate(self.strings[1:]):
@@ -38,10 +37,6 @@ class GuitarImage(Guitar):
                 new_xy = (xy[0] + ij[0], xy[1] + ij[1])
                 self.fill_circle(new_xy, color, im)
         return im
-
-
-class FormImage(Form):
-    pass  # todo implement subclassing of Form class
 
 
 def main():

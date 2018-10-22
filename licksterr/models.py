@@ -1,12 +1,13 @@
 import bisect
 import logging
+from collections import defaultdict
 from enum import Enum
+from fractions import Fraction
 
 from flask_sqlalchemy import SQLAlchemy
 from mingus.core import notes, scales
 from sqlalchemy.dialects.postgresql import ARRAY
-
-from licksterr.guitar import String
+from sqlalchemy.ext.associationproxy import association_proxy
 
 logger = logging.getLogger(__name__)
 db = SQLAlchemy()
@@ -40,44 +41,70 @@ SCALES_DICT = {
     scales.MajorBlues: Scale.MAJORBLUES
 }
 
+STANDARD_TUNING = (4, 9, 2, 7, 11, 4)
 
-class NoteContainer(db.Model):
-    __abstract__ = True
+
+class String:
+    FRETS = 23
+
+    def __init__(self, tuning):
+        if not 0 <= tuning < 12:
+            raise ValueError(f"Tuning must be an integer in [0, 11].")
+        self.notes = tuple(notes.int_to_note((tuning + fret) % 12) for fret in range(self.FRETS))
+
+    def __getitem__(self, item):
+        if isinstance(item, int):
+            return self.notes[item]
+        else:
+            return self.get_notes([item])
+
+    def __iter__(self):
+        for fret, note in enumerate(self.notes):
+            yield fret, note
+
+    def __str__(self):
+        return str(self.notes)
+
+    def get_notes(self, note_list):
+        """Returns a list of fret positions that match the notes given as input"""
+        return tuple(fret for fret, n1 in self if any(notes.is_enharmonic(n1, n2) for n2 in note_list))
+
+
+class Song(db.Model):
+    __tablename__ = 'song'
+
     id = db.Column(db.Integer, primary_key=True)
-    notes = db.Column(ARRAY(db.Integer, dimensions=2), nullable=False)
-    tuning = db.Column(ARRAY(db.Integer), nullable=False)
-
-    def __init__(self, tuning=(4, 9, 2, 7, 11, 4), **kwargs):
-        super().__init__(tuning=tuning, **kwargs)
-
-    @classmethod
-    def contains_note(cls, string, fret):
-        return cls.notes.contains([[string, fret]])
+    album = db.Column(db.String())
+    artist = db.Column(db.String())
+    title = db.Column(db.String())
+    tempo = db.Column(db.Integer)
+    year = db.Column(db.Integer)
+    tracks = db.relationship('Track')
+    tab = db.Column(db.LargeBinary)
 
 
-class Lick(NoteContainer):
-    __tablename__ = 'lick'
+class Track(db.Model):
+    __tablename__ = 'track'
 
-    unique_key = db.Column(db.String, nullable=False, unique=True)
-    # starting and ending measures
-    start = db.Column(db.Integer)
-    end = db.Column(db.Integer)
-    duration = db.Column(db.Float)
-
-    def __init__(self, notes, **kwargs):
-        kwargs['unique_key'] = ''.join(f"S{string}F{fret:02}" for string, fret in notes)
-        super().__init__(notes=notes, **kwargs)
+    id = db.Column(db.Integer, primary_key=True)
+    song_id = db.Column(db.Integer, db.ForeignKey('song.id'))
+    tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
+    measures = association_proxy('track_measure', 'measure')
+    notes = association_proxy('track_note', 'note')
 
 
-class Form(NoteContainer):
+class Form(db.Model):
     __tablename__ = 'form'
     __table_args__ = (
         db.UniqueConstraint('key', 'scale', 'name', 'tuning'),
     )
-
+    id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.Integer, nullable=False)
     scale = db.Column(db.Enum(Scale), nullable=False)
-    name = db.Column(db.String, nullable=False)
+    name = db.Column(db.String(), nullable=False)
+    tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
+    measures = association_proxy('form_measure', 'measure')
+    notes = association_proxy('form_note', 'note')
 
     def __init__(self, notes, key, scale, name, transpose=False, **kwargs):
         if transpose:
@@ -88,23 +115,13 @@ class Form(NoteContainer):
                     bisect.insort(notes, (string, fret + 12))
                 elif fret > 11:
                     bisect.insort(notes, (string, fret - 12))
-        super().__init__(notes=notes, key=key, scale=scale, name=name, **kwargs)
+        notes = tuple(Note.get(string, fret) for string, fret in notes)
+        super().__init__(key=key, scale=scale, name=name, **kwargs)
+        for note in notes:
+            db.session.add(FormNote(form=self, note=note))
 
     def __str__(self):
         return f"{self.key} {self.scale} {self.forms}"
-
-    @classmethod
-    def join_forms(cls, forms):
-        keys, scales, tunings, name = set(), set(), set(), ''
-        for form in forms:
-            keys.add(form.key)
-            scales.add(form.scale)
-            tunings.add(form.tuning)
-            name += form.name
-        # Can't combine forms of different keys / scales / tunings
-        assert len(keys) == len(scales) == len(tunings) == 1
-        notes = tuple(sorted({note for form in forms for note in form.notes}))
-        return cls(notes, keys.pop(), scales.pop(), name, tuning=tunings.pop())
 
     @classmethod
     def calculate_caged_form(cls, key, scale, form, form_start=0, transpose=False):
@@ -115,7 +132,7 @@ class Form(NoteContainer):
         greater than 3 frets (the pinkie would have to stretch and it's easier to get that note going down a string).
         If by the end not all the roots are included in the form, call the function again and start on an higher fret.
         """
-        strings = (None,) + tuple(String(note) for note in 'EADGBE'[::-1])
+        strings = (None,) + tuple(String(note) for note in STANDARD_TUNING[::-1])
         # Indexes of string for each root form
         root_forms = {
             'C': (2, 5),
@@ -167,29 +184,142 @@ class Form(NoteContainer):
         return cls(notes_list, key, scale, form, transpose=transpose)
 
 
-class FormLickMatch(db.Model):
-    __tablename__ = 'form_lick_match'
+class Measure(db.Model):
+    __tablename__ = 'measure'
 
-    form_id = db.Column(db.Integer, db.ForeignKey("form.id"), primary_key=True)
-    lick_id = db.Column(db.Integer, db.ForeignKey("lick.id"), primary_key=True)
-    score = db.Column(db.Float, nullable=False)
+    id = db.Column(db.String(), primary_key=True)
+    beats = association_proxy('measure_beat', 'beat')
+
+    @classmethod
+    def get_or_create(cls, beats, tuning=STANDARD_TUNING):
+        id = ''.join(beat.id for beat in beats)
+        measure = Measure.query.get(id)
+        if not measure:
+            measure = Measure(id=id)
+            form_match = defaultdict(float)  # % of duration a form occupies in this measure
+            total_duration = 0
+            for beat, duration in beats:
+                association = MeasureBeat(measure=measure, beat=beat)
+                db.session.add(association)
+                total_duration = Fraction(1 / beat.duration)
+                if beat.notes:
+                    containing_forms = {beat.notes[0].forms}
+                    for note in beat.notes[1:]:
+                        matching_forms = {form for form in note.forms if form.tuning == tuning}
+                        containing_forms.intersection_update(matching_forms)
+                    form_match.update({k: form_match[k] + Fraction(1 / beat.duration) for k in form_match.keys()})
+            form_match.update({k: form_match[k] / total_duration for k in form_match.keys()})
+            for form, match in form_match.items():
+                db.session.add(FormMeasure(form=form, measure=measure, match=match))
+                db.session.commit()
+        return measure
 
 
-class Song(db.Model):
-    __tablename__ = 'song'
+class Beat(db.Model):
+    __tablename__ = 'beat'
+
+    id = db.Column(db.String(39), primary_key=True)
+    duration = db.Column(db.Integer, nullable=False)  # duration of the note(s) (1 - whole, 2 - half, ...)
+    notes = association_proxy('beat_note', 'note')
+
+    @classmethod
+    def get_or_create(cls, beat):
+        if len(notes) > 6:
+            raise ValueError("Can't have more than two notes per string!")
+        notes_id = ''.join(repr(note) for note in sorted(beat.notes, key=lambda note: (note.string, note.fret)))
+        id = notes_id + f'D{beat.duration.value:02}'
+        b = Beat.get(id)
+        if not b:
+            b = Beat(id=id, notes=notes, duration=beat.duration.value)
+            db.session.add(b)
+            db.session.commit()
+        return b
+
+
+class Note(db.Model):
+    __tablename__ = 'note'
+    __table_args__ = (
+        db.UniqueConstraint('string', 'fret', 'muted'),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String)
-    artist = db.Column(db.String)
-    album = db.Column(db.String)
-    year = db.Column(db.Integer)
-    genre = db.Column(db.String)
-    tab = db.Column(db.LargeBinary)
+    string = db.Column(db.Integer, nullable=False)
+    fret = db.Column(db.Integer, nullable=False)
+    muted = db.Column(db.Boolean, nullable=False, default=False)
+    forms = association_proxy('form_note', 'form')
 
-class SongLickMatch(db.Model):
-    __tablename__ = 'song_lick_match'
+    def __repr__(self):
+        return f"S{self.string}F{self.fret:02}" + ('M' if self.muted else 'P')
 
-    song_id = db.Column(db.Integer, db.ForeignKey("song.id"), primary_key=True)
-    lick_id = db.Column(db.Integer, db.ForeignKey("lick.id"), primary_key=True)
-    score = db.Column(db.Float, nullable=False)
-    # todo implement many to many between licks and song
+    @classmethod
+    def get(cls, string, fret, muted=False):
+        return cls.query.filter_by(string=string, fret=fret, muted=muted).first()
+
+
+# Associations
+
+class TrackMeasure(db.Model):
+    __tablename__ = 'track_measure'
+
+    track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
+    measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
+    order = db.Column(db.Integer, primary_key=True)
+    # % that this measure occupies in the track
+    match = db.Column(db.Float)
+
+    track = db.relationship('Track', backref=db.backref("track_measure", cascade='all, delete-orphan'))
+    measure = db.relationship('Measure')
+
+
+class FormMeasure(db.Model):
+    __tablename__ = 'form_measure'
+
+    form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
+    measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
+    # % of match between this form and this measure
+    match = db.Column(db.Float, nullable=False)
+
+    form = db.relationship('Form', backref=db.backref("form_measure", cascade='all, delete-orphan'))
+    measure = db.relationship('Measure')
+
+
+class MeasureBeat(db.Model):
+    __tablename__ = 'measure_beat'
+
+    measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
+    beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
+
+    measure = db.relationship('Measure', backref=db.backref('measure_beat', cascade='all, delete-orphan'))
+    beat = db.relationship('Beat')
+
+
+class TrackNote(db.Model):
+    __tablename__ = 'track_note'
+
+    track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
+    match = db.Column(db.Float)
+    # relationships
+    track = db.relationship('Track', backref=db.backref('track_note', cascade='all, delete-orphan'))
+    note = db.relationship('Note')
+
+
+class FormNote(db.Model):
+    __tablename__ = 'form_note'
+
+    form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
+    # relationships
+    form = db.relationship('Form', backref=db.backref('form_note', cascade='all, delete-orphan'))
+    note = db.relationship('Note')
+
+
+class BeatNote(db.Model):
+    __tablename__ = 'beat_note'
+
+    beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
+    note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
+    # todo store not effect here
+    # relationships
+    beat = db.relationship('Beat', backref=db.backref('beat_note', cascade='all, delete-orphan'))
+    note = db.relationship('Note')
