@@ -33,7 +33,7 @@ def parse_song(filename):
         "artist": song.artist,
         "tempo": song.tempo,
         "title": song.title,
-        "year": song.copyright
+        "year": song.copyright if song.copyright else None
     }
     s = Song(**data)
     db.session.add(s)
@@ -52,7 +52,8 @@ def parse_track(song, track):
     tuning = (notes.note_to_int(str(string)[0]) for string in reversed(track.strings))
     measure_match = defaultdict(float)  # measure: % of time this measure occupies in the track
     note_match = defaultdict(float)  # note: % of time this note occupies in the track
-    for measure in track.measures:
+    for i, measure in enumerate(track.measures):
+        logger.debug(f"Analyzing measure #{i}")
         beats, durations = [], []
         for beat in measure.voices[0].beats:  # fixme handle multiple voices
             beat = Beat.get_or_create(beat)

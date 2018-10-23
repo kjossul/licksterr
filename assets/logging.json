@@ -3,7 +3,7 @@
     "disable_existing_loggers": false,
     "formatters": {
         "simple": {
-            "format": "%(asctime)s %(filename)25s:%(lineno)4d %(levelname)8s: %(message)s"
+            "format": "%(asctime)s %(filename)15s:%(lineno)4d %(levelname)5s: %(message)s"
         }
     },
 

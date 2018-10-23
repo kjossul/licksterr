@@ -3,7 +3,7 @@ import os
 from PIL import Image, ImageColor
 
 from licksterr import ASSETS_DIR
-from licksterr.models import String, Form, STANDARD_TUNING
+from licksterr.models import String, Form, STANDARD_TUNING, TrackNote
 
 
 class GuitarImage:
@@ -22,6 +22,23 @@ class GuitarImage:
             color = 'red' if note.fret in self.strings[note.string][form.key] else 'green'
             self.fill_note(self.strings[note.string], note.fret, color=ImageColor.getcolor(color, 'RGBA'), im=im)
         return im
+
+    def draw_note_heatmap(self, track, im=None):
+        colors = {
+            0: 'blue',
+            0.05: 'cyan',
+            0.10: 'yellow',
+            0.15: 'orange',
+            0.2: 'red'
+        }
+        im = im if im else self.im
+        for note in track.notes:
+            match = TrackNote.get_match(track, note)
+            k = min((k for k in colors), key=lambda k: abs(k - match))
+            color = ImageColor.getcolor(colors[k], mode='RGBA')
+            self.fill_note(self.strings[note.string], note.fret, color=color, im=im)
+        im.show()
+
 
     def fill_note(self, string, fret, color=None, im=None):
         self.fill_circle(string.positions[fret], color=color, im=im)

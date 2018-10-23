@@ -1,7 +1,11 @@
+import logging
+
 from licksterr.analyzer import parse_song
-from licksterr.models import Form, Scale, Note, Measure
+from licksterr.image import GuitarImage
+from licksterr.models import Form, Scale, Note, Measure, Track
 from tests import LicksterrTest
 
+logger = logging.getLogger(__name__)
 
 class TestDatabase(LicksterrTest):
     def test_db_init(self):
@@ -14,3 +18,9 @@ class TestDatabase(LicksterrTest):
         parse_song("tests/test.gp5")
         # two identical measures should produce a single row in the database
         self.assertEqual(1, len(Measure.query.all()))
+
+    def test_creep(self):
+        g = GuitarImage()
+        parse_song('wywh.gp5')
+        for track in Track.query.all():
+            g.draw_note_heatmap(track)

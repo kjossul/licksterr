@@ -94,6 +94,10 @@ class Track(db.Model):
     measures = association_proxy('track_measure', 'measure')
     notes = association_proxy('track_note', 'note')
 
+    def get_notes_by_hit(self):
+        return sorted(self.notes,
+                      key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
+
 
 class Form(db.Model):
     __tablename__ = 'form'
@@ -205,7 +209,8 @@ class Measure(db.Model):
             form_match = defaultdict(float)  # % of duration a form occupies in this measure
             total_duration = 0
             for beat in beats:
-                db.session.add(MeasureBeat(measure=measure, beat=beat))
+                if not MeasureBeat.query.filter_by(measure=measure, beat=beat).first():
+                    db.session.add(MeasureBeat(measure=measure, beat=beat))
                 total_duration = Fraction(1 / beat.duration)
                 if beat.notes:
                     containing_forms = {*beat.notes[0].forms}
@@ -309,6 +314,10 @@ class TrackNote(db.Model):
     # relationships
     track = db.relationship('Track', backref=db.backref('track_note', cascade='all, delete-orphan'))
     note = db.relationship('Note')
+
+    @classmethod
+    def get_match(cls, track, note):
+        return cls.query.get((track.id, note.id)).match
 
 
 class FormNote(db.Model):
