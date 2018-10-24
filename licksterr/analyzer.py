@@ -51,7 +51,7 @@ def parse_track(song, track):
     Iterates the track beat by beat and checks for matches
     """
     track_duration = 0
-    tuning = (notes.note_to_int(str(string)[0]) for string in reversed(track.strings))
+    tuning = [notes.note_to_int(str(string)[0]) for string in reversed(track.strings)]
     measure_match = defaultdict(float)  # measure: % of time this measure occupies in the track
     note_match = defaultdict(float)  # note: % of time this note occupies in the track
     for i, measure in enumerate(track.measures):

@@ -1,7 +1,7 @@
 import logging
 
 from licksterr.analyzer import parse_song
-from licksterr.models import Form, Scale, Note, Measure
+from licksterr.models import Form, Scale, Note, Measure, NOTES_DICT, FormMeasure, Beat
 from tests import LicksterrTest
 
 logger = logging.getLogger(__name__)
@@ -17,4 +17,15 @@ class TestDatabase(LicksterrTest):
         parse_song("tests/test.gp5")
         # two identical measures should produce a single row in the database
         self.assertEqual(1, len(Measure.query.all()))
+        # only 4 beats should be generated
+        self.assertEqual(4, len(Beat.query.all()))
+        m = Measure.query.first()
+        # There should be a 100% match with the E form of the G major scale
+        self.test_form_match(1, 'G', Scale.IONIAN, 'E', m)
+        # There should be a 75% match with the E form of the G major pentatonic (no 4th)
+        self.test_form_match(0.75, 'G', Scale.MAJORPENTATONIC, 'E', m)
 
+    def test_form_match(self, expected, key, scale, form, measure):
+        form = Form.get(NOTES_DICT[key], scale, form)
+        match = FormMeasure.get(form, measure).match
+        self.assertEqual(expected, match)

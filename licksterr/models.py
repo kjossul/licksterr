@@ -27,6 +27,8 @@ class Scale(Enum):
     MAJORBLUES = 10
 
 
+NOTES_DICT = {notes.int_to_note(value, accidental): value for value in range(12) for accidental in ('#', 'b')}
+
 SCALES_DICT = {
     scales.Ionian: Scale.IONIAN,
     scales.Dorian: Scale.DORIAN,
@@ -41,7 +43,7 @@ SCALES_DICT = {
     scales.MajorBlues: Scale.MAJORBLUES
 }
 
-STANDARD_TUNING = (4, 9, 2, 7, 11, 4)
+STANDARD_TUNING = [4, 9, 2, 7, 11, 4]
 
 
 class String:
@@ -201,7 +203,8 @@ class Measure(db.Model):
     beats = association_proxy('measure_beat', 'beat')
 
     @classmethod
-    def get_or_create(cls, beats, tuning=STANDARD_TUNING):
+    def get_or_create(cls, beats, tuning=None):
+        tuning = tuning if tuning else STANDARD_TUNING
         id = ''.join(beat.id for beat in beats)
         measure = Measure.query.get(id)
         if not measure:
@@ -211,17 +214,17 @@ class Measure(db.Model):
             for beat in beats:
                 if not MeasureBeat.query.filter_by(measure=measure, beat=beat).first():
                     db.session.add(MeasureBeat(measure=measure, beat=beat))
-                total_duration = Fraction(1 / beat.duration)
+                total_duration += Fraction(1 / beat.duration)
                 if beat.notes:
-                    containing_forms = {*beat.notes[0].forms}
+                    containing_forms = {form for form in beat.notes[0].forms if form.tuning == tuning}
                     for note in beat.notes[1:]:
                         matching_forms = {form for form in note.forms if form.tuning == tuning}
                         containing_forms.intersection_update(matching_forms)
-                    form_match.update({k: form_match[k] + Fraction(1 / beat.duration) for k in form_match.keys()})
+                    form_match.update({form: form_match[form] + Fraction(1 / beat.duration)
+                                       for form in containing_forms})
             form_match.update({k: form_match[k] / total_duration for k in form_match.keys()})
             for form, match in form_match.items():
                 db.session.add(FormMeasure(form=form, measure=measure, match=match))
-                # db.session.commit()
         return measure
 
 
@@ -245,7 +248,6 @@ class Beat(db.Model):
             db.session.add(b)
             for note in notes:
                 db.session.add(BeatNote(beat=b, note=note))
-            # db.session.commit()
         return b
 
 
@@ -293,6 +295,10 @@ class FormMeasure(db.Model):
 
     form = db.relationship('Form', backref=db.backref("form_measure", cascade='all, delete-orphan'))
     measure = db.relationship('Measure')
+
+    @classmethod
+    def get(cls, form, measure):
+        return cls.query.get((form.id, measure.id))
 
 
 class MeasureBeat(db.Model):
