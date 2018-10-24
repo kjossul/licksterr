@@ -4,6 +4,7 @@ from PIL import Image, ImageColor
 
 from licksterr import ASSETS_DIR
 from licksterr.models import String, Form, STANDARD_TUNING, TrackNote
+from licksterr.util import timing
 
 
 class GuitarImage:
@@ -23,6 +24,7 @@ class GuitarImage:
             self.fill_note(self.strings[note.string], note.fret, color=ImageColor.getcolor(color, 'RGBA'), im=im)
         return im
 
+    @timing
     def draw_note_heatmap(self, track, im=None):
         colors = {
             0: 'blue',
@@ -37,8 +39,7 @@ class GuitarImage:
             k = min((k for k in colors), key=lambda k: abs(k - match))
             color = ImageColor.getcolor(colors[k], mode='RGBA')
             self.fill_note(self.strings[note.string], note.fret, color=color, im=im)
-        im.show()
-
+        return im
 
     def fill_note(self, string, fret, color=None, im=None):
         self.fill_circle(string.positions[fret], color=color, im=im)

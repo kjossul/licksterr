@@ -8,7 +8,7 @@ from flask import Flask
 
 from licksterr.models import db, Form
 from licksterr.queries import init_db
-from licksterr.server import analysis
+from licksterr.server import analysis, navigator
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
@@ -44,7 +44,9 @@ def create_app(config=None):
     app.config.from_object(config if config else 'config')
     if not config:
         app.config.from_pyfile('config.py')
-    app.register_blueprint(analysis)
+    blueprints = (navigator, analysis)
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)
     # Flask-SQLAlchemy
     app.app_context().push()
     db.init_app(app)

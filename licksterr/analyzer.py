@@ -8,6 +8,7 @@ import guitarpro as gp
 from mingus.core import notes
 
 from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, TrackNote
+from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +45,16 @@ def parse_song(filename):
     db.session.commit()
 
 
+@timing
 def parse_track(song, track):
     """
-    Iterates the track beat by beat todo doc
+    Iterates the track beat by beat and checks for matches
     """
     track_duration = 0
     tuning = (notes.note_to_int(str(string)[0]) for string in reversed(track.strings))
     measure_match = defaultdict(float)  # measure: % of time this measure occupies in the track
     note_match = defaultdict(float)  # note: % of time this note occupies in the track
     for i, measure in enumerate(track.measures):
-        logger.debug(f"Analyzing measure #{i}")
         beats, durations = [], []
         for beat in measure.voices[0].beats:  # fixme handle multiple voices
             beat = Beat.get_or_create(beat)

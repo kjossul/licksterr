@@ -4,7 +4,7 @@ from pathlib import Path
 TESTING = True
 DEBUG = True
 # Paths
-PROJECT_DIR = Path(os.path.realpath(__name__)).parents[0] / ".caged"
+PROJECT_DIR = Path(os.path.realpath(__name__)).parents[0] / "licksterr"
 UPLOAD_DIR = Path(PROJECT_DIR) / "uploads"
 Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 

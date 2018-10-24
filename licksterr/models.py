@@ -221,7 +221,7 @@ class Measure(db.Model):
             form_match.update({k: form_match[k] / total_duration for k in form_match.keys()})
             for form, match in form_match.items():
                 db.session.add(FormMeasure(form=form, measure=measure, match=match))
-                db.session.commit()
+                # db.session.commit()
         return measure
 
 
@@ -245,7 +245,7 @@ class Beat(db.Model):
             db.session.add(b)
             for note in notes:
                 db.session.add(BeatNote(beat=b, note=note))
-            db.session.commit()
+            # db.session.commit()
         return b
 
 
