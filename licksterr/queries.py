@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 def init_db():
+    logger.info("Adding notes to database")
     for string in range(1, 7):
         for fret in range(0, 30):
             db.session.add(Note(string=string, fret=fret))
     db.session.commit()
-    logger.info("Added notes to database.")
+    logger.info("Added notes to database. Generating forms..")
     for key, scale in yield_scales():
         logger.debug(f"Generating {key} {scale}.")
         for form_name in 'CAGED':

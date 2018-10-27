@@ -1,2 +1,4 @@
 .caged/
 instance/
+venv/
+*.sock
