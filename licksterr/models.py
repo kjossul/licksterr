@@ -96,6 +96,10 @@ class Track(db.Model):
     measures = association_proxy('track_measure', 'measure')
     notes = association_proxy('track_note', 'note')
 
+    def __str__(self):
+        song = Song.query.get(self.song_id)
+        return f"Track #{self.id} for song {song}"
+
     def get_notes_by_hit(self):
         return sorted(self.notes,
                       key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
@@ -204,6 +208,10 @@ class Measure(db.Model):
 
     @classmethod
     def get_or_create(cls, beats, tuning=None):
+        """
+        Retrieves the measure with the given beats or creates a new one from them. Upon creation, known forms in the
+        database are matched against the notes found in each beat and % of matching is calculated.
+        """
         tuning = tuning if tuning else STANDARD_TUNING
         id = ''.join(beat.id for beat in beats)
         measure = Measure.query.get(id)
@@ -211,9 +219,8 @@ class Measure(db.Model):
             measure = Measure(id=id)
             form_match = defaultdict(float)  # % of duration a form occupies in this measure
             total_duration = 0
-            for beat in beats:
-                if not MeasureBeat.query.filter_by(measure=measure, beat=beat).first():
-                    db.session.add(MeasureBeat(measure=measure, beat=beat))
+            for i, beat in enumerate(beats):
+                db.session.add(MeasureBeat(measure=measure, beat=beat, order=i))
                 total_duration += Fraction(1 / beat.duration)
                 if beat.notes:
                     containing_forms = {form for form in beat.notes[0].forms if form.tuning == tuning}
@@ -284,6 +291,13 @@ class TrackMeasure(db.Model):
     track = db.relationship('Track', backref=db.backref("track_measure", cascade='all, delete-orphan'))
     measure = db.relationship('Measure')
 
+    def __str__(self):
+        return f"Match (track: {self.track}, measure: {self.measure}): {self.match}"
+
+    @classmethod
+    def get_top(cls, track):
+        return sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)
+
 
 class FormMeasure(db.Model):
     __tablename__ = 'form_measure'
@@ -296,6 +310,13 @@ class FormMeasure(db.Model):
     form = db.relationship('Form', backref=db.backref("form_measure", cascade='all, delete-orphan'))
     measure = db.relationship('Measure')
 
+    def __str__(self):
+        return f"Match (form: {self.form}, measure: {self.measure}): {self.match}"
+
+    @classmethod
+    def get_top(cls, measure):
+        return sorted(cls.query.filter_by(track=measure).all(), key=lambda x: x.match, reverse=True)
+
     @classmethod
     def get(cls, form, measure):
         return cls.query.get((form.id, measure.id))
@@ -306,6 +327,7 @@ class MeasureBeat(db.Model):
 
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
     beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
+    order = db.Column(db.Integer, primary_key=True)
 
     measure = db.relationship('Measure', backref=db.backref('measure_beat', cascade='all, delete-orphan'))
     beat = db.relationship('Beat')

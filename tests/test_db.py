@@ -7,6 +7,7 @@ from tests import LicksterrTest
 
 logger = logging.getLogger(__name__)
 
+
 class TestDatabase(LicksterrTest):
     def test_db_init(self):
         notes = Note.query.all()
