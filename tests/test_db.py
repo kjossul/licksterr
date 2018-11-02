@@ -1,5 +1,6 @@
 import logging
 
+from licksterr import ASSETS_DIR
 from licksterr.analyzer import parse_song
 from licksterr.models import Form, Scale, Note, Measure, NOTES_DICT, FormMeasure, Beat
 from tests import LicksterrTest
@@ -14,7 +15,7 @@ class TestDatabase(LicksterrTest):
         self.assertEqual(len(Scale) * 12 * 5, len(forms))
 
     def test_song_parsing(self):
-        parse_song("tests/test.gp5")
+        parse_song(str(ASSETS_DIR / "tests/test.gp5"))
         # two identical measures should produce a single row in the database
         self.assertEqual(1, len(Measure.query.all()))
         # only 4 beats should be generated

@@ -6,9 +6,10 @@ from pathlib import Path
 
 from flask import Flask
 
+from licksterr.analyzer import analysis
 from licksterr.models import db, Form
 from licksterr.queries import init_db
-from licksterr.server import analysis, navigator
+from licksterr.server import navigator
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"

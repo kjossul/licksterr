@@ -5,16 +5,41 @@ from fractions import Fraction
 from pathlib import Path
 
 import guitarpro as gp
+from flask import Blueprint, request, abort, current_app
 from mingus.core import notes
+from werkzeug.utils import secure_filename
 
 from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, TrackNote
 from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
+analysis = Blueprint('analysis', __name__)
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
+
+ALLOWED_EXTENSIONS = {'gp3', 'gp4', 'gp5'}
+
+
+@analysis.route('/upload', methods=['POST'])
+def upload_file():
+    if not request.files:
+        logger.debug("Received upload request without files.")
+        abort(400)
+    for filename, file in request.files.items():
+        if file and allowed_file(filename):
+            filename = secure_filename(filename)
+            dest = os.path.join(current_app.config['UPLOAD_DIR'], filename)
+            file.save(dest)
+            logger.info(f"{filename} successfully uploaded to {dest}.")
+            parse_song(dest)
+    return "OK"
+
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def parse_song(filename):
@@ -28,7 +53,8 @@ def parse_song(filename):
         29: "Overdrive guitar",
         30: "Distortion guitar"
     }
-    song = gp.parse(str(ASSETS_DIR / filename))
+    logger.info(f"Parsing song {filename}")
+    song = gp.parse(filename)
     data = {
         "album": song.album,
         "artist": song.artist,
