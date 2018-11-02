@@ -5,7 +5,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import guitarpro as gp
-from flask import Blueprint, request, abort, current_app
+from flask import Blueprint, request, abort, current_app, jsonify
 from mingus.core import notes
 from werkzeug.utils import secure_filename
 
@@ -40,6 +40,14 @@ def upload_file():
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@analysis.route('/songs/<song_id>', methods=['GET'])
+def get_song_info(song_id):
+    song = Song.query.get(song_id)
+    if not song:
+        abort(404)
+    return jsonify(song.to_dict())
 
 
 def parse_song(filename):

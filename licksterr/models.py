@@ -9,6 +9,8 @@ from mingus.core import notes, scales
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.associationproxy import association_proxy
 
+from licksterr.util import row2dict
+
 logger = logging.getLogger(__name__)
 db = SQLAlchemy()
 
@@ -85,6 +87,11 @@ class Song(db.Model):
 
     def __str__(self):
         return f"{self.artist} - {self.title}"
+
+    def to_dict(self):
+        info = row2dict(self)
+        info['tracks'] = [track.id for track in self.tracks]
+        return info
 
 
 class Track(db.Model):
