@@ -50,6 +50,14 @@ def get_song_info(song_id):
     return jsonify(song.to_dict())
 
 
+@analysis.route('/tracks/<track_id>', methods=['GET'])
+def get_track_info(track_id):
+    track = Track.query.get(track_id)
+    if not track:
+        abort(404)
+    return jsonify(track.to_dict())
+
+
 def parse_song(filename):
     # todo avoid analysis if song already exists in DB
     GUITARS_CODES = {
@@ -86,7 +94,7 @@ def parse_track(song, track):
     """
     track_duration = 0
     tuning = [notes.note_to_int(str(string)[0]) for string in reversed(track.strings)]
-    measure_match = defaultdict(float)  # measure: % of time this measure occupies in the track
+    measure_match = defaultdict(list)  # measure: list of indexes the measure occupies in the track
     note_match = defaultdict(float)  # note: % of time this note occupies in the track
     for i, measure in enumerate(track.measures):
         beats, durations = [], []
@@ -98,14 +106,14 @@ def parse_track(song, track):
             for note in beat.notes:
                 note_match[note] += Fraction(1 / beat.duration)
         measure = Measure.get_or_create(beats, tuning=tuning)
-        measure_match[measure] += 1
+        measure_match[measure].append(i)
     # Calculates final duration values
-    measure_match.update({k: measure_match[k] / len(track.measures) for k in measure_match.keys()})
     note_match.update({k: note_match[k] / track_duration for k in note_match.keys()})
     # Updates database objects
     track = Track(song_id=song.id, tuning=tuning)
-    for measure, match in measure_match.items():
-        db.session.add(TrackMeasure(track=track, measure=measure, match=match))
+    for measure, indexes in measure_match.items():
+        match = len(indexes) / i
+        db.session.add(TrackMeasure(track=track, measure=measure, match=match, indexes=indexes))
     for note, match in note_match.items():
         db.session.add(TrackNote(track=track, note=note, match=match))
     return track

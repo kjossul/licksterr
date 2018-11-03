@@ -111,6 +111,8 @@ class Track(db.Model):
         return sorted(self.notes,
                       key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
 
+    def to_dict(self):
+        info = row2dict(self)
 
 class Form(db.Model):
     __tablename__ = 'form'
@@ -227,7 +229,11 @@ class Measure(db.Model):
             form_match = defaultdict(float)  # % of duration a form occupies in this measure
             total_duration = 0
             for i, beat in enumerate(beats):
-                db.session.add(MeasureBeat(measure=measure, beat=beat, order=i))
+                mb = MeasureBeat.get(measure, beat)
+                if not mb:
+                    db.session.add(MeasureBeat(measure=measure, beat=beat, indexes=[i]))
+                else:
+                    mb.indexes.append(i)
                 total_duration += Fraction(1 / beat.duration)
                 if beat.notes:
                     containing_forms = {form for form in beat.notes[0].forms if form.tuning == tuning}
@@ -294,6 +300,7 @@ class TrackMeasure(db.Model):
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
     # % that this measure occupies in the track
     match = db.Column(db.Float)
+    indexes = db.Column(db.ARRAY(db.Integer))
 
     track = db.relationship('Track', backref=db.backref("track_measure", cascade='all, delete-orphan'))
     measure = db.relationship('Measure')
@@ -334,10 +341,14 @@ class MeasureBeat(db.Model):
 
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
     beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
-    order = db.Column(db.Integer, primary_key=True)
+    indexes = db.Column(ARRAY(db.Integer))
 
     measure = db.relationship('Measure', backref=db.backref('measure_beat', cascade='all, delete-orphan'))
     beat = db.relationship('Beat')
+
+    @classmethod
+    def get(cls, measure, beat):
+        return cls.query.get((measure.id, beat.id))
 
 
 class TrackNote(db.Model):
