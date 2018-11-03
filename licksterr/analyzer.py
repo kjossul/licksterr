@@ -58,6 +58,14 @@ def get_track_info(track_id):
     return jsonify(track.to_dict())
 
 
+@analysis.route('/measures/<measure_id>', methods=['GET'])
+def get_measure_info(measure_id):
+    measure = Measure.query.get(measure_id)
+    if not measure:
+        abort(404)
+    return jsonify(measure.to_dict())
+
+
 def parse_song(filename):
     # todo avoid analysis if song already exists in DB
     GUITARS_CODES = {
@@ -112,7 +120,7 @@ def parse_track(song, track):
     # Updates database objects
     track = Track(song_id=song.id, tuning=tuning)
     for measure, indexes in measure_match.items():
-        match = len(indexes) / i
+        match = len(indexes) / (i + 1)
         db.session.add(TrackMeasure(track=track, measure=measure, match=match, indexes=indexes))
     for note, match in note_match.items():
         db.session.add(TrackNote(track=track, note=note, match=match))

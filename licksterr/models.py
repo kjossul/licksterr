@@ -113,6 +113,11 @@ class Track(db.Model):
 
     def to_dict(self):
         info = row2dict(self)
+        associations = TrackMeasure.query.filter_by(track=self).all()
+        info['measures'] = {}
+        for association in associations:
+            info['measures'][association.measure.id] = {'indexes': association.indexes, 'match': association.match}
+        return info
 
 class Form(db.Model):
     __tablename__ = 'form'
@@ -213,7 +218,13 @@ class Measure(db.Model):
     __tablename__ = 'measure'
 
     id = db.Column(db.String(), primary_key=True)
+    forms = association_proxy('form_measure', 'form')
     beats = association_proxy('measure_beat', 'beat')
+
+    def to_dict(self):
+        # todo add beats to this dict
+        associations = FormMeasure.get_top(self)
+        return {association.form.id: association.match for association in associations}
 
     @classmethod
     def get_or_create(cls, beats, tuning=None):
@@ -329,7 +340,7 @@ class FormMeasure(db.Model):
 
     @classmethod
     def get_top(cls, measure):
-        return sorted(cls.query.filter_by(track=measure).all(), key=lambda x: x.match, reverse=True)
+        return sorted(cls.query.filter_by(measure=measure).all(), key=lambda x: x.match, reverse=True)
 
     @classmethod
     def get(cls, form, measure):
