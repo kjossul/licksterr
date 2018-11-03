@@ -111,12 +111,33 @@ class Track(db.Model):
         return sorted(self.notes,
                       key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
 
-    def to_dict(self):
+    def to_dict(self, form_threshold=0.33):
         info = row2dict(self)
-        associations = TrackMeasure.query.filter_by(track=self).all()
         info['measures'] = {}
-        for association in associations:
-            info['measures'][association.measure.id] = {'indexes': association.indexes, 'match': association.match}
+        info['forms'] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))  # {key: {scale: {form: match}}}
+        i = 0
+        for association in TrackMeasure.query.filter_by(track=self).all():
+            i += len(association.indexes)
+            measure = association.measure
+            forms = []
+            for fm in FormMeasure.query.filter_by(measure=measure).all():
+                forms.append({**fm.form.to_dict(), **{'match': fm.match}})
+                info['forms'][fm.form.key][fm.form.scale.name][fm.form.name] += fm.match * len(association.indexes)
+            info['measures'][measure.id] = {'indexes': association.indexes, 'match': association.match, 'forms': forms}
+        # prunes all the forms that haven't passed the threshold
+        for key, scale_dict in list(info['forms'].items()):
+            for scale, form_dict in list(scale_dict.items()):
+                info['forms'][key][scale] = {form: match / i for form, match in form_dict.items()
+                                             if match >= form_threshold * i}
+                if not info['forms'][key][scale]:
+                    info['forms'][key][scale] = defaultdict(float)
+            if not info['forms'][key]:
+                info['forms'][key] = defaultdict(lambda: defaultdict(float))
+        # removes references to removed forms in the measure dict (that now default to 0)
+        for measure_id, measure_dict in info['measures'].items():
+            info['measures'][measure_id]['forms'] = [form for form in measure_dict['forms']
+                                                     if
+                                                     info['forms'][form['key']][form['scale']].get(form['name'], 0) > 0]
         return info
 
 class Form(db.Model):
@@ -148,6 +169,9 @@ class Form(db.Model):
 
     def __str__(self):
         return f"{self.key} {self.scale} {self.forms}"
+
+    def to_dict(self):
+        return {'name': self.name, 'key': self.key, 'scale': self.scale.name}
 
     @classmethod
     def get(cls, key, scale, name):
@@ -222,9 +246,11 @@ class Measure(db.Model):
     beats = association_proxy('measure_beat', 'beat')
 
     def to_dict(self):
-        # todo add beats to this dict
-        associations = FormMeasure.get_top(self)
-        return {association.form.id: association.match for association in associations}
+        info = row2dict(self)
+        info['beats'] = []
+        for association in MeasureBeat.query.filter_by(measure=self).all():
+            info['beats'].append({**association.beat.to_dict(), **{'indexes': association.indexes}})
+        return info
 
     @classmethod
     def get_or_create(cls, beats, tuning=None):
@@ -266,6 +292,9 @@ class Beat(db.Model):
     duration = db.Column(db.Integer, nullable=False)  # duration of the note(s) (1 - whole, 2 - half, ...)
     notes = association_proxy('beat_note', 'note')
 
+    def to_dict(self):
+        return {'duration': self.duration, 'notes': [note.to_dict() for note in self.notes]}
+
     @classmethod
     def get_or_create(cls, beat):
         if len(beat.notes) > 6:
@@ -296,6 +325,9 @@ class Note(db.Model):
 
     def __repr__(self):
         return f"S{self.string}F{self.fret:02}" + ('M' if self.muted else 'P')
+
+    def to_dict(self):
+        return row2dict(self)
 
     @classmethod
     def get(cls, string, fret, muted=False):
