@@ -52,7 +52,7 @@ def get_song_info(song_id):
 
 @analysis.route('/tracks/<track_id>', methods=['GET'])
 def get_track_info(track_id):
-    match = request.args.get('match', default=1)
+    match = int(request.args.get('match', default=1))
     track = Track.query.get(track_id)
     if not track:
         abort(404)

@@ -130,8 +130,9 @@ class Track(db.Model):
                 form_match[form.key][form.scale][form.name] += fm.match * len(association.indexes)
             info['measures'][measure.id] = {'indexes': association.indexes, 'match': association.match, 'forms': forms}
         # Keeps only the keys and scale with forms with the highest scores
-        largest = heapq.nlargest(match, all_forms, key=lambda f: form_match[f.key][f.scale][f.name])
-        all_matches = [form for l in largest for form in all_forms if l.scale == form.scale and l.key == form.key]
+        keys_scales = {(form.key, form.scale) for form in all_forms}
+        largest = heapq.nlargest(match, keys_scales, key=lambda x: sum(form_match[x[0]][x[1]].values()))
+        all_matches = [form for key, scale in largest for form in all_forms if scale == form.scale and key == form.key]
         info['forms'] = [{'form': f.to_dict(), 'match': round(form_match[f.key][f.scale][f.name] / i, FLOAT_PRECISION)}
                          for f in all_matches]
         # removes references to removed forms in the measure dict
