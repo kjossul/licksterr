@@ -1,4 +1,5 @@
 import bisect
+import heapq
 import logging
 from collections import defaultdict
 from enum import Enum
@@ -46,6 +47,7 @@ SCALES_DICT = {
 }
 
 STANDARD_TUNING = [4, 9, 2, 7, 11, 4]
+FLOAT_PRECISION = 6
 
 
 class String:
@@ -111,34 +113,36 @@ class Track(db.Model):
         return sorted(self.notes,
                       key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
 
-    def to_dict(self, form_threshold=0.33):
+    def to_dict(self, match=1):
         info = row2dict(self)
         info['measures'] = {}
-        info['forms'] = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))  # {key: {scale: {form: match}}}
+        all_forms = set()
+        form_match = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))  # {key: {scale: {form: match}}}
         i = 0
         for association in TrackMeasure.query.filter_by(track=self).all():
             i += len(association.indexes)
             measure = association.measure
             forms = []
             for fm in FormMeasure.query.filter_by(measure=measure).all():
-                forms.append({**fm.form.to_dict(), **{'match': fm.match}})
-                info['forms'][fm.form.key][fm.form.scale.name][fm.form.name] += fm.match * len(association.indexes)
+                form = fm.form
+                all_forms.add(form)
+                forms.append({'form': form, 'match': fm.match})
+                form_match[form.key][form.scale][form.name] += fm.match * len(association.indexes)
             info['measures'][measure.id] = {'indexes': association.indexes, 'match': association.match, 'forms': forms}
-        # prunes all the forms that haven't passed the threshold
-        for key, scale_dict in list(info['forms'].items()):
-            for scale, form_dict in list(scale_dict.items()):
-                info['forms'][key][scale] = {form: match / i for form, match in form_dict.items()
-                                             if match >= form_threshold * i}
-                if not info['forms'][key][scale]:
-                    info['forms'][key][scale] = defaultdict(float)
-            if not info['forms'][key]:
-                info['forms'][key] = defaultdict(lambda: defaultdict(float))
-        # removes references to removed forms in the measure dict (that now default to 0)
-        for measure_id, measure_dict in info['measures'].items():
-            info['measures'][measure_id]['forms'] = [form for form in measure_dict['forms']
-                                                     if
-                                                     info['forms'][form['key']][form['scale']].get(form['name'], 0) > 0]
+        # Keeps only the keys and scale with forms with the highest scores
+        largest = heapq.nlargest(match, all_forms, key=lambda f: form_match[f.key][f.scale][f.name])
+        all_matches = [form for l in largest for form in all_forms if l.scale == form.scale and l.key == form.key]
+        info['forms'] = [{'form': f.to_dict(), 'match': round(form_match[f.key][f.scale][f.name] / i, FLOAT_PRECISION)}
+                         for f in all_matches]
+        # removes references to removed forms in the measure dict
+        for measure_id, measure_dict in list(info['measures'].items()):
+            for form_dict in list(measure_dict['forms']):
+                form = form_dict['form']
+                if form in all_matches:
+                    measure_dict['forms'].append({'form': form.to_dict(), 'match': form_dict['match']})
+                measure_dict['forms'].remove(form_dict)
         return info
+
 
 class Form(db.Model):
     __tablename__ = 'form'
@@ -169,6 +173,9 @@ class Form(db.Model):
 
     def __str__(self):
         return f"{self.key} {self.scale} {self.forms}"
+
+    def __hash__(self):
+        return self.id
 
     def to_dict(self):
         return {'name': self.name, 'key': self.key, 'scale': self.scale.name}
@@ -342,7 +349,7 @@ class TrackMeasure(db.Model):
     track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
     # % that this measure occupies in the track
-    match = db.Column(db.Float)
+    match = db.Column(db.Float(precision=FLOAT_PRECISION))
     indexes = db.Column(db.ARRAY(db.Integer))
 
     track = db.relationship('Track', backref=db.backref("track_measure", cascade='all, delete-orphan'))
@@ -362,7 +369,7 @@ class FormMeasure(db.Model):
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
     # % of match between this form and this measure
-    match = db.Column(db.Float, nullable=False)
+    match = db.Column(db.Float(precision=FLOAT_PRECISION), nullable=False)
 
     form = db.relationship('Form', backref=db.backref("form_measure", cascade='all, delete-orphan'))
     measure = db.relationship('Measure')
@@ -399,7 +406,7 @@ class TrackNote(db.Model):
 
     track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
-    match = db.Column(db.Float)
+    match = db.Column(db.Float(precision=FLOAT_PRECISION))
     # relationships
     track = db.relationship('Track', backref=db.backref('track_note', cascade='all, delete-orphan'))
     note = db.relationship('Note')
