@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+    <h1>Upload file</h1>
+    <form action="http://localhost:5000/upload" method="POST"
+          enctype="multipart/form-data">
+        <input type="file" name="file"/>
+        <input type="submit"/>
+    </form>
+    <h1>Analysis list</h1>
+    <ul>
+        {% for song, tracks in songs.items() %}
+            {% for track in tracks %}
+                <li>{{ song|e }} - track #{{ loop.index }}: {{ track['forms'] }}</li>
+            {% endfor %}
+        {% endfor %}
+    </ul>
+{% endblock %}

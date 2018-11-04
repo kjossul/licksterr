@@ -10,7 +10,6 @@ import guitarpro as gp
 from flask import Blueprint, request, abort, current_app, jsonify
 from mingus.core import notes
 from sqlalchemy.exc import IntegrityError
-from werkzeug.utils import secure_filename
 
 from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, TrackNote
 from licksterr.util import timing
@@ -22,34 +21,31 @@ PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 
-ALLOWED_EXTENSIONS = {'gp3', 'gp4', 'gp5'}
-
 
 @analysis.route('/upload', methods=['POST'])
 def upload_file():
     if not request.files:
         logger.debug("Received upload request without files.")
         abort(400)
-    for filename, file in request.files.items():
-        if file and allowed_file(filename):
-            filename = secure_filename(filename)
+    for file in request.files.values():
+        if file:
+            extension = file.filename[-4:]
+            if extension not in {'.gp3', 'gp4', '.gp5'}:
+                abort(400)
             temp_dest = str(current_app.config['TEMP_DIR'] / str(uuid.uuid1()))
             file.save(temp_dest)
-            logger.debug(f"{filename} temporarily uploaded to {temp_dest}.")
+            logger.debug(f"temporarily uploaded to {temp_dest}.")
             try:
                 song = parse_song(temp_dest)
-                file.save(str(current_app.config['UPLOAD_DIR'] / (str(song.id) + filename[-4:])))
+                file.save(str(current_app.config['UPLOAD_DIR'] / (str(song.id))))
                 logger.debug(f"Successfully parsed song {song}")
             except IntegrityError:
                 logger.debug("Song already exists with the same hash")
                 db.session.rollback()
+            # todo check what happens if random file is uploaded
             os.remove(temp_dest)
             logger.debug("Removed file at temporary destination.")
     return "OK"
-
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 @analysis.route('/songs/<song_id>', methods=['GET'])

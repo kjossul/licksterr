@@ -115,6 +115,7 @@ class Track(db.Model):
                       key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
 
     def to_dict(self, match=1):
+        # todo move this analysis outside the view (TrackForm class)
         info = row2dict(self)
         form_match = defaultdict(float)  # {form: match}
         keys_scales = defaultdict(float)
