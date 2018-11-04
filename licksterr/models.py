@@ -85,6 +85,7 @@ class Song(db.Model):
     title = db.Column(db.String())
     tempo = db.Column(db.Integer)
     year = db.Column(db.Integer)
+    hash = db.Column(db.String(128), unique=True)
     tracks = db.relationship('Track')
 
     def __str__(self):
@@ -115,33 +116,21 @@ class Track(db.Model):
 
     def to_dict(self, match=1):
         info = row2dict(self)
-        info['measures'] = {}
-        all_forms = set()
-        form_match = defaultdict(lambda: defaultdict(lambda: defaultdict(float)))  # {key: {scale: {form: match}}}
-        i = 0
-        for association in TrackMeasure.query.filter_by(track=self).all():
-            i += len(association.indexes)
-            measure = association.measure
-            forms = []
-            for fm in FormMeasure.query.filter_by(measure=measure).all():
-                form = fm.form
-                all_forms.add(form)
-                forms.append({'form': form, 'match': fm.match})
-                form_match[form.key][form.scale][form.name] += fm.match * len(association.indexes)
-            info['measures'][measure.id] = {'indexes': association.indexes, 'match': association.match, 'forms': forms}
+        form_match = defaultdict(float)  # {form: match}
+        keys_scales = defaultdict(float)
+        for track_note in TrackNote.query.filter_by(track=self).all():
+            for form_note in FormNote.query.filter_by(note=track_note.note).all():
+                form = form_note.form
+                score = track_note.match * form_note.score
+                form_match[form] += score
+                keys_scales[(form.key, form.scale.value)] += score
+        info['measures'] = [{'measure': tm.measure.id, 'indexes': tm.indexes, 'match': tm.match}
+                            for tm in TrackMeasure.get_measures(self)]
         # Keeps only the keys and scale with forms with the highest scores
-        keys_scales = {(form.key, form.scale) for form in all_forms}
-        largest = heapq.nlargest(match, keys_scales, key=lambda x: sum(form_match[x[0]][x[1]].values()))
-        all_matches = [form for key, scale in largest for form in all_forms if scale == form.scale and key == form.key]
-        info['forms'] = [{'form': f.to_dict(), 'match': round(form_match[f.key][f.scale][f.name] / i, FLOAT_PRECISION)}
-                         for f in all_matches]
+        largest = heapq.nlargest(match, keys_scales, key=keys_scales.get)
+        info['forms'] = [{'form': form.to_dict(), 'match': match} for key, scale in largest
+                         for form, match in form_match.items() if scale == form.scale.value and key == form.key]
         # removes references to removed forms in the measure dict
-        for measure_id, measure_dict in list(info['measures'].items()):
-            for form_dict in list(measure_dict['forms']):
-                form = form_dict['form']
-                if form in all_matches:
-                    measure_dict['forms'].append({'form': form.to_dict(), 'match': form_dict['match']})
-                measure_dict['forms'].remove(form_dict)
         return info
 
 
@@ -158,19 +147,22 @@ class Form(db.Model):
     measures = association_proxy('form_measure', 'measure')
     notes = association_proxy('form_note', 'note')
 
-    def __init__(self, notes, key, scale, name, transpose=False, **kwargs):
+    def __init__(self, note_list, key, scale, name, transpose=False, **kwargs):
         if transpose:
-            # Copy-pastes this shape along the fretboard. 11 is escluded because a guitar goes just up the 22th fret
-            note_list = list(notes)
-            for string, fret in note_list:
+            # Copy-pastes this shape along the fretboard. 11 is excluded because a guitar goes just up the 22th fret
+            for string, fret in list(note_list):
                 if fret < 11:
-                    bisect.insort(notes, (string, fret + 12))
+                    bisect.insort(note_list, (string, fret + 12))
                 elif fret > 11:
-                    bisect.insort(notes, (string, fret - 12))
-        notes = tuple(Note.get(string, fret) for string, fret in notes)
+                    bisect.insort(note_list, (string, fret - 12))
+        note_list = tuple(Note.get(string, fret) for string, fret in note_list)
         super().__init__(key=key, scale=scale, name=name, **kwargs)
-        for note in notes:
-            db.session.add(FormNote(form=self, note=note))
+        for note in note_list:
+            # assigns a different score to each note based on the role it plays in the form
+            # todo find better function (currently only assigns 1 to the root and 0.5 to others)
+            tuning = kwargs.get('tuning', STANDARD_TUNING)
+            score = 1 if (tuning[note.string - 1] + note.fret) % 12 == key else 0.5
+            db.session.add(FormNote(form=self, note=note, score=score))
 
     def __str__(self):
         return f"{self.key} {self.scale} {self.forms}"
@@ -360,8 +352,8 @@ class TrackMeasure(db.Model):
         return f"Match (track: {self.track}, measure: {self.measure}): {self.match}"
 
     @classmethod
-    def get_top(cls, track):
-        return sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)
+    def get_measures(cls, track):
+        return cls.query.filter_by(track=track).all()
 
 
 class FormMeasure(db.Model):
@@ -422,6 +414,7 @@ class FormNote(db.Model):
 
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
+    score = db.Column(db.Integer)
     # relationships
     form = db.relationship('Form', backref=db.backref('form_note', cascade='all, delete-orphan'))
     note = db.relationship('Note', backref=db.backref('form_note', cascade='all, delete-orphan'))

@@ -15,6 +15,7 @@ def init_db():
     db.session.commit()
     logger.debug("Added notes to database. Generating forms..")
     for key, scale in yield_scales():
+        logger.debug(f"Generating {key} {scale}")
         for form_name in 'CAGED':
             form = Form.calculate_caged_form(key, scale, form_name, transpose=True)
             db.session.add(form)

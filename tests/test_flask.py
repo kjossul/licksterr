@@ -28,10 +28,17 @@ class FlaskTest(LicksterrTest):
         json = requests.get(url).json()
         self.assertTrue(json)
 
+    def test_multiple_upload(self):
+        self.test_file_upload()
+        self.test_file_upload()
+        files = [name for name in os.listdir(self.app.config['UPLOAD_DIR'])]
+        self.assertEqual(1, len(files))
+
     def _test_wywh(self):
         """Best match for wish you were here solo track should be G IONIAN, G form"""
         self.test_file_upload(TEST_ASSETS / "wish_you_were_here.gp5")
         url = self.get_server_url() + f"/tracks/2"  # solo guitar
-        json = requests.get(url, params={'match': 3}).json()
+        json = requests.get(url).json()
+        self.logger.info(json['forms'])
         biggest = max(json['forms'], key=lambda d: d['match'])
         self.assertDictEqual({'key': 7, 'scale': 'IONIAN', 'name': 'G'}, biggest['form'])
