@@ -1,5 +1,4 @@
 import bisect
-import heapq
 import logging
 from collections import defaultdict
 from enum import Enum
@@ -32,6 +31,8 @@ class Scale(Enum):
 
 NOTES_DICT = {notes.int_to_note(value, accidental): value for value in range(12) for accidental in ('#', 'b')}
 
+KEYS = tuple((value, is_major) for is_major in (True, False) for value in range(12))
+
 SCALES_DICT = {
     scales.Ionian: Scale.IONIAN,
     scales.Dorian: Scale.DORIAN,
@@ -45,8 +46,12 @@ SCALES_DICT = {
     scales.MinorBlues: Scale.MINORBLUES,
     scales.MajorBlues: Scale.MAJORBLUES
 }
-
-STANDARD_TUNING = [4, 9, 2, 7, 11, 4]
+# True for major scales, False for minor scales
+SCALES_TYPE = {
+    True: [Scale.IONIAN, Scale.LYDIAN, Scale.MIXOLYDIAN, Scale.MAJORPENTATONIC, Scale.MAJORBLUES],
+    False: [Scale.DORIAN, Scale.PHRYGIAN, Scale.MIXOLYDIAN, Scale.LOCRIAN, Scale.MINORPENTATONIC, Scale.MINORBLUES]
+}
+STANDARD_TUNING = [4, 11, 7, 2, 9, 4]
 FLOAT_PRECISION = 6
 
 
@@ -86,6 +91,7 @@ class Song(db.Model):
     tempo = db.Column(db.Integer)
     year = db.Column(db.Integer)
     hash = db.Column(db.String(128), unique=True)
+    keys = db.Column(ARRAY(db.Integer))
     tracks = db.relationship('Track')
 
     def __str__(self):
@@ -104,34 +110,14 @@ class Track(db.Model):
     song_id = db.Column(db.Integer, db.ForeignKey('song.id'))
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
     measures = association_proxy('track_measure', 'measure')
-    notes = association_proxy('track_note', 'note')
 
     def __str__(self):
         song = Song.query.get(self.song_id)
         return f"Track #{self.id} for song {song}"
 
-    def get_notes_by_hit(self):
-        return sorted(self.notes,
-                      key=lambda note: TrackNote.query.get((self.id, note.id)).match, reverse=True)
-
-    def to_dict(self, match=1):
-        # todo move this analysis outside the view (TrackForm class)
+    def to_dict(self):
+        # todo match against the found keys
         info = row2dict(self)
-        form_match = defaultdict(float)  # {form: match}
-        keys_scales = defaultdict(float)
-        for track_note in TrackNote.query.filter_by(track=self).all():
-            for form_note in FormNote.query.filter_by(note=track_note.note).all():
-                form = form_note.form
-                score = track_note.match * form_note.score
-                form_match[form] += score
-                keys_scales[(form.key, form.scale.value)] += score
-        info['measures'] = [{'measure': tm.measure.id, 'indexes': tm.indexes, 'match': tm.match}
-                            for tm in TrackMeasure.get_measures(self)]
-        # Keeps only the keys and scale with forms with the highest scores
-        largest = heapq.nlargest(match, keys_scales, key=keys_scales.get)
-        info['forms'] = [{'form': form.to_dict(), 'match': match} for key, scale in largest
-                         for form, match in form_match.items() if scale == form.scale.value and key == form.key]
-        # removes references to removed forms in the measure dict
         return info
 
 
@@ -187,7 +173,7 @@ class Form(db.Model):
         greater than 3 frets (the pinkie would have to stretch and it's easier to get that note going down a string).
         If by the end not all the roots are included in the form, call the function again and start on an higher fret.
         """
-        strings = (None,) + tuple(String(note) for note in STANDARD_TUNING[::-1])
+        strings = (None,) + tuple(String(note) for note in STANDARD_TUNING)
         # Indexes of string for each root form
         root_forms = {
             'C': (2, 5),
@@ -393,21 +379,6 @@ class MeasureBeat(db.Model):
     @classmethod
     def get(cls, measure, beat):
         return cls.query.get((measure.id, beat.id))
-
-
-class TrackNote(db.Model):
-    __tablename__ = 'track_note'
-
-    track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
-    note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
-    match = db.Column(db.Float(precision=FLOAT_PRECISION))
-    # relationships
-    track = db.relationship('Track', backref=db.backref('track_note', cascade='all, delete-orphan'))
-    note = db.relationship('Note')
-
-    @classmethod
-    def get_match(cls, track, note):
-        return cls.query.get((track.id, note.id)).match
 
 
 class FormNote(db.Model):

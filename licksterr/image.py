@@ -3,7 +3,7 @@ import os
 from PIL import Image, ImageColor
 
 from licksterr import ASSETS_DIR
-from licksterr.models import String, Form, STANDARD_TUNING, TrackNote
+from licksterr.models import String, Form, STANDARD_TUNING
 from licksterr.util import timing
 
 
