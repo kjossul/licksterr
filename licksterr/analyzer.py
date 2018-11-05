@@ -1,7 +1,7 @@
 import hashlib
+import json
 import logging
 import os
-import uuid
 from collections import defaultdict, deque
 from fractions import Fraction
 from pathlib import Path
@@ -10,9 +10,8 @@ import guitarpro as gp
 from flask import Blueprint, request, abort, current_app, jsonify
 from mingus.core import notes
 
-from licksterr.exceptions import SongHashCollisionException
 from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, KEYS, FormMeasure, SCALES_TYPE, TrackForm
-from licksterr.util import timing
+from licksterr.util import timing, flask_file_handler, OK
 
 logger = logging.getLogger(__name__)
 analysis = Blueprint('analysis', __name__)
@@ -21,7 +20,7 @@ PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 
-# fixme find right parameter tuning. Now I set it such as analysis is done at the end of all song.
+# fixme find right parameter tuning. Now I've set it such as analysis is done at the end of all song.
 MAJOR_PROFILES = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0]
 MINOR_PROFILES = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0]
 KS_SECONDS = 1000  # amount of seconds used to split segments in krumhansl-schmuckler alg
@@ -29,29 +28,22 @@ KS_CHANGE_PENALTY = 0.75  # penalty for changing the key in the k-s alg
 
 
 @analysis.route('/upload', methods=['POST'])
-def upload_file():
-    if not request.files:
-        logger.debug("Received upload request without files.")
-        abort(400)
-    for file in request.files.values():
-        if file:
-            extension = file.filename[-4:]
-            if extension not in {'.gp3', '.gp4', '.gp5'}:
-                abort(400)
-            temp_dest = str(current_app.config['TEMP_DIR'] / str(uuid.uuid1()))
-            file.save(temp_dest)
-            logger.debug(f"temporarily uploaded to {temp_dest}.")
-            try:
-                song = parse_song(temp_dest)
-                file.save(str(current_app.config['UPLOAD_DIR'] / (str(song.id))))
-                logger.debug(f"Successfully parsed song {song}")
-            except SongHashCollisionException:
-                logger.debug("Song already exists with the same hash")
-                db.session.rollback()
-            # todo check what happens if random file is uploaded
-            os.remove(temp_dest)
-            logger.debug("Removed file at temporary destination.")
-    return "OK"
+@flask_file_handler
+def upload_file(file, temp_dest):
+    tracks = request.values.get('tracks', None)
+    tracks = json.loads(tracks) if tracks else None
+    song = parse_song(temp_dest, tracks=[int(track) for track in tracks])
+    file.save(str(current_app.config['UPLOAD_DIR'] / (str(song.id))))
+    logger.debug(f"Successfully parsed song {song}")
+    # todo check what happens if random file is uploaded
+    return OK
+
+
+@analysis.route('/tabinfo', methods=['POST'])
+@flask_file_handler
+def get_tab_info(file, temp_dest):
+    song = gp.parse(temp_dest)
+    return jsonify({i: track.name for i, track in enumerate(song.tracks) if len(track.strings) == 6})
 
 
 @analysis.route('/songs/<song_id>', methods=['GET'])
@@ -78,8 +70,7 @@ def get_measure_info(measure_id):
     return jsonify(measure.to_dict())
 
 
-def parse_song(filename):
-    # todo avoid analysis if song already exists in DB
+def parse_song(filename, tracks=None):
     GUITARS_CODES = {
         24: "Nylon string guitar",
         25: "Steel string guitar",
@@ -100,12 +91,13 @@ def parse_song(filename):
     }
     with open(filename, mode='rb') as f:
         data['hash'] = str(hashlib.sha256(f.read()).digest()[:16])
-    if Song.query.filter_by(hash=data['hash']).all():
-        raise SongHashCollisionException
+    s = Song.query.filter_by(hash=data['hash']).first()
+    if s:
+        logger.debug(f"Song with the same hash already found. All tracks parsed.")
+        return s
     s = Song(**data)
-    for track in song.tracks:
-        # todo let the user choose which track to parse
-        if getattr(track.channel, 'instrument', None) in GUITARS_CODES:
+    for i, track in enumerate(song.tracks):
+        if not tracks or i in tracks:
             t = parse_track(s, track, song.tempo)
             s.tracks.append(t)
     db.session.add(s)
