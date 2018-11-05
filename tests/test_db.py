@@ -1,7 +1,7 @@
 import logging
 
 from licksterr import ASSETS_DIR
-from licksterr.analyzer import parse_song
+from licksterr.analysis import parse_song
 from licksterr.models import Form, Scale, Note, Measure, NOTES_DICT, FormMeasure, Beat, Track
 from tests import LicksterrTest
 

@@ -1,5 +1,4 @@
 import hashlib
-import json
 import logging
 import os
 from collections import defaultdict, deque
@@ -7,14 +6,12 @@ from fractions import Fraction
 from pathlib import Path
 
 import guitarpro as gp
-from flask import Blueprint, request, abort, current_app, jsonify
 from mingus.core import notes
 
-from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, KEYS, FormMeasure, SCALES_TYPE, TrackForm
-from licksterr.util import timing, flask_file_handler, OK
+from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, KEYS
+from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
-analysis = Blueprint('analysis', __name__)
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
@@ -25,59 +22,6 @@ MAJOR_PROFILES = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0]
 MINOR_PROFILES = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0]
 KS_SECONDS = 1000  # amount of seconds used to split segments in krumhansl-schmuckler alg
 KS_CHANGE_PENALTY = 0.75  # penalty for changing the key in the k-s alg
-
-
-@analysis.route('/upload', methods=['POST'])
-@flask_file_handler
-def upload_file(file, temp_dest):
-    tracks = request.values.get('tracks', None)
-    tracks = json.loads(tracks) if tracks else None
-    song = parse_song(temp_dest, tracks=[int(track) for track in tracks])
-    file.save(str(current_app.config['UPLOAD_DIR'] / (str(song.id))))
-    logger.debug(f"Successfully parsed song {song}")
-    # todo check what happens if random file is uploaded
-    return OK
-
-
-@analysis.route('/tabinfo', methods=['POST'])
-@flask_file_handler
-def get_tab_info(file, temp_dest):
-    song = gp.parse(temp_dest)
-    return jsonify({i: track.name for i, track in enumerate(song.tracks) if len(track.strings) == 6})
-
-
-@analysis.route('/songs/<song_id>', methods=['GET'])
-def get_song(song_id):
-    song = Song.query.get(song_id)
-    if not song:
-        abort(404)
-    return jsonify(song.to_dict())
-
-
-@analysis.route('/songs/<song_id>', methods=['DELETE'])
-def remove_song(song_id):
-    song = Song.query.get(song_id)
-    if not song:
-        abort(404)
-    db.session.delete(song)
-    db.session.commit()
-    return OK
-
-
-@analysis.route('/tracks/<track_id>', methods=['GET'])
-def get_track(track_id):
-    track = Track.query.get(track_id)
-    if not track:
-        abort(404)
-    return jsonify(track.to_dict())
-
-
-@analysis.route('/measures/<measure_id>', methods=['GET'])
-def get_measure(measure_id):
-    measure = Measure.query.get(measure_id)
-    if not measure:
-        abort(404)
-    return jsonify(measure.to_dict())
 
 
 def parse_song(filename, tracks=None):
@@ -158,25 +102,16 @@ def parse_track(song, track, tempo):
     # fixme handle empty tab
     logger.debug(f"Found keys {key_match}")
     track = Track(song_id=song.id, tuning=tuning, keys=key_match)
-    track_len = sum(len(indexes) for measure, indexes in measure_match.items()
-                    if any(beat.notes for beat in measure.beats))
     for measure, indexes in measure_match.items():
-        match = len(indexes) / track_len
-        tm = TrackMeasure(track=track, measure=measure, match=match, indexes=indexes)
+        tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
         # Calculates matches of track against form given the keys
-        for k in set(key_match):
-            key, is_major = KEYS[k]
-            for fm in FormMeasure.get_forms(tm.measure):
-                form = fm.form
-                if form.tuning == tuning and form.key == key and form.scale in SCALES_TYPE[is_major]:
-                    tf = TrackForm.get_or_create(track=track, form=form)
-                    tf.match += fm.match * len(tm.indexes) / track_len
+    for k in set(key_match):
+        track.add_key(k)
     return track
 
 
 def krumhansl_schmuckler(durations):
-    logger.debug(f"Calculating key based on {durations}")
     key_match = defaultdict(float)  # {(key, major?): score}
     major_profiles = deque(MAJOR_PROFILES)
     minor_profiles = deque(MINOR_PROFILES)

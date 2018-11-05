@@ -117,7 +117,46 @@ class Track(db.Model):
         song = Song.query.get(self.song_id)
         return f"Track #{self.id} for song {song}"
 
-    def to_dict(self, match=1):
+    def add_key(self, key):
+        if key in self.keys:
+            return
+        self.keys.append(key)
+        form_matches = defaultdict(float)
+        scale_matches = defaultdict(float)
+        total_length = 0
+        for tm in TrackMeasure.get_measures(self):
+            key, is_major = KEYS[key]
+            if any(beat.notes for beat in tm.measure.beats):
+                total_length += len(tm.indexes)
+            for fm in FormMeasure.get_forms(tm.measure):
+                form = fm.form
+                if form.tuning == self.tuning and form.key == key and form.scale in SCALES_TYPE[is_major]:
+                    score = fm.match * len(tm.indexes)
+                    form_matches[form] += score
+                    scale_matches[form.scale] += score
+        top_scale = max(scale_matches, key=scale_matches.get)
+        # sets the scale to the pentatonics if there are no differences in match
+        if top_scale == Scale.IONIAN and scale_matches[top_scale] == scale_matches[Scale.MAJORPENTATONIC]:
+            top_scale = Scale.MAJORPENTATONIC
+        elif top_scale == Scale.AEOLIAN and scale_matches[top_scale] == scale_matches[Scale.MINORPENTATONIC]:
+            top_scale = Scale.MINORPENTATONIC
+        for form, match in form_matches.items():
+            if form.scale == top_scale:
+                tf = TrackForm(track=self, form=form, match=match)
+                db.session.add(tf)
+
+    def remove_key(self, key):
+        try:
+            self.keys.remove(key)
+            key, is_major = key
+            for tm in TrackForm.get_forms(self):
+                if tm.form.scale in SCALES_TYPE[is_major] and tm.form.key == key:
+                    db.session.delete(tm)
+            db.session.commit()
+        except ValueError:
+            pass
+
+    def to_dict(self):
         """
         Returns a description of this track
         :param match: amount of scales to return, in descending order of match
@@ -125,13 +164,14 @@ class Track(db.Model):
         """
         info = row2dict(self)
         info['match'] = []
-        scale_scores = TrackForm.get_scale_scores(self)
-        for key, scale in list(sorted(scale_scores, key=scale_scores.get, reverse=True))[:match]:
-            form_scores = {}
+        for k in self.keys:
+            key, is_major = KEYS[k]
+            key_result = {'key': notes.int_to_note(key), 'isMajor': is_major, 'forms': defaultdict(float)}
             for tf in TrackForm.get_forms(self):
-                if tf.form.key == key and tf.form.scale.name == scale:
-                    form_scores[tf.form.name] = tf.match
-            info['match'].append({'key': key, 'scale': scale, 'forms': form_scores})
+                if tf.form.key == key:
+                    key_result['forms'][tf.form.name] = tf.match
+                    key_result['scale'] = tf.form.scale.name
+            info['match'].append(key_result)
         return info
 
 
@@ -345,14 +385,6 @@ class TrackForm(db.Model):
     # relationships
     track = db.relationship('Track', backref=db.backref('track_to_form', cascade='all, delete-orphan'))
     form = db.relationship('Form', backref=db.backref('form_to_track', cascade='all, delete-orphan'))
-
-    @classmethod
-    def get_scale_scores(cls, track):
-        match = defaultdict(float)
-        for tf in cls.get_forms(track):
-            form = tf.form
-            match[(form.key, form.scale.name)] += tf.match
-        return match
 
     @classmethod
     def get_forms(cls, track):
