@@ -110,14 +110,27 @@ class Track(db.Model):
     song_id = db.Column(db.Integer, db.ForeignKey('song.id'))
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
     measures = association_proxy('track_measure', 'measure')
+    forms = association_proxy('track_form', 'form')
 
     def __str__(self):
         song = Song.query.get(self.song_id)
         return f"Track #{self.id} for song {song}"
 
-    def to_dict(self):
-        # todo match against the found keys
+    def to_dict(self, match=1):
+        """
+        Returns a description of this track
+        :param match: amount of scales to return, in descending order of match
+        :return:
+        """
         info = row2dict(self)
+        info['match'] = []
+        scale_scores = TrackForm.get_scale_scores(self)
+        for key, scale in list(sorted(scale_scores, key=scale_scores.get, reverse=True))[:match]:
+            form_scores = {}
+            for tf in TrackForm.get_forms(self):
+                if tf.form.key == key and tf.form.scale.name == scale:
+                    form_scores[tf.form.name] = tf.match
+            info['match'].append({'key': key, 'scale': scale, 'forms': form_scores})
         return info
 
 
@@ -240,12 +253,11 @@ class Measure(db.Model):
         return info
 
     @classmethod
-    def get_or_create(cls, beats, tuning=None):
+    def get_or_create(cls, beats):
         """
         Retrieves the measure with the given beats or creates a new one from them. Upon creation, known forms in the
         database are matched against the notes found in each beat and % of matching is calculated.
         """
-        tuning = tuning if tuning else STANDARD_TUNING
         id = ''.join(beat.id for beat in beats)
         measure = Measure.query.get(id)
         if not measure:
@@ -260,10 +272,9 @@ class Measure(db.Model):
                     mb.indexes.append(i)
                 total_duration += Fraction(1 / beat.duration)
                 if beat.notes:
-                    containing_forms = {form for form in beat.notes[0].forms if form.tuning == tuning}
+                    containing_forms = set(beat.notes[0].forms)
                     for note in beat.notes[1:]:
-                        matching_forms = {form for form in note.forms if form.tuning == tuning}
-                        containing_forms.intersection_update(matching_forms)
+                        containing_forms.intersection_update(note.forms)
                     form_match.update({form: form_match[form] + Fraction(1 / beat.duration)
                                        for form in containing_forms})
             form_match.update({k: form_match[k] / total_duration for k in form_match.keys()})
@@ -322,6 +333,36 @@ class Note(db.Model):
 
 
 # Associations
+class TrackForm(db.Model):
+    __tablename__ = 'track_form'
+    track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
+    form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
+    # % of this form in the track
+    match = db.Column(db.Float(precision=FLOAT_PRECISION))
+    # relationships
+    track = db.relationship('Track', backref=db.backref('track_form', cascade='all, delete-orphan'))
+    form = db.relationship('Form')
+
+    @classmethod
+    def get_scale_scores(cls, track):
+        match = defaultdict(float)
+        for tf in cls.get_forms(track):
+            form = tf.form
+            match[(form.key, form.scale.name)] += tf.match
+        return match
+
+    @classmethod
+    def get_forms(cls, track):
+        return cls.query.filter_by(track=track).all()
+
+    @classmethod
+    def get_or_create(cls, track, form):
+        tf = cls.query.get((track.id, form.id))
+        if not tf:
+            instance = cls(track=track, form=form, match=0)
+            db.session.add(instance)
+            return instance
+        return tf
 
 class TrackMeasure(db.Model):
     __tablename__ = 'track_measure'
@@ -358,8 +399,8 @@ class FormMeasure(db.Model):
         return f"Match (form: {self.form}, measure: {self.measure}): {self.match}"
 
     @classmethod
-    def get_top(cls, measure):
-        return sorted(cls.query.filter_by(measure=measure).all(), key=lambda x: x.match, reverse=True)
+    def get_forms(cls, measure):
+        return cls.query.filter_by(measure=measure).all()
 
     @classmethod
     def get(cls, form, measure):

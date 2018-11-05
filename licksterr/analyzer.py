@@ -11,7 +11,7 @@ from flask import Blueprint, request, abort, current_app, jsonify
 from mingus.core import notes
 from sqlalchemy.exc import IntegrityError
 
-from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, KEYS
+from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, KEYS, FormMeasure, SCALES_TYPE, TrackForm
 from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
@@ -133,7 +133,7 @@ def parse_track(song, track, tempo):
             # Does not increment segment duration if we had just pauses since now
             if any(duration for duration in note_durations):
                 segment_duration += beat_duration
-        measure = Measure.get_or_create(beats, tuning=tuning)
+        measure = Measure.get_or_create(beats)
         measure_match[measure].append(i)
         # k-s analysis
         # tempo is expressed in quarters per minute. When we reached a segment long enough, start key analysis
@@ -148,10 +148,20 @@ def parse_track(song, track, tempo):
             segment_duration = 0
             note_durations = [0] * 12
     # Updates database objects
+    track_len = len(track.measures)
     track = Track(song_id=song.id, tuning=tuning)
     for measure, indexes in measure_match.items():
         match = len(indexes) / (i + 1)
-        db.session.add(TrackMeasure(track=track, measure=measure, match=match, indexes=indexes))
+        tm = TrackMeasure(track=track, measure=measure, match=match, indexes=indexes)
+        db.session.add(tm)
+        # Calculates matches of track against form given the keys
+        for k in key_match:
+            key, is_major = KEYS[k]
+            for fm in FormMeasure.get_forms(tm.measure):
+                form = fm.form
+                if form.tuning == tuning and form.key == key and form.scale in SCALES_TYPE[is_major]:
+                    tf = TrackForm.get_or_create(track=track, form=form)
+                    tf.match += fm.match * len(tm.indexes) / track_len
     return track, key_match
 
 

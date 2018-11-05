@@ -18,9 +18,7 @@ class FlaskTest(LicksterrTest):
         self.test_file_upload()
         url = self.get_server_url() + "/tracks/1"
         json = requests.get(url).json()
-        pass
-        # key_scales = {(form['form']['key'], form['form']['scale']) for form in json['forms']}
-        # self.assertEqual(3, len(key_scales))
+        self.assertEqual(1, len(json['match']))
 
     def test_measure_match(self):
         self.test_file_upload()
@@ -40,6 +38,6 @@ class FlaskTest(LicksterrTest):
         self.test_file_upload(TEST_ASSETS / "wish_you_were_here.gp5")
         url = self.get_server_url() + f"/tracks/2"  # solo guitar
         json = requests.get(url).json()
-        self.logger.info(json['forms'])
-        biggest = max(json['forms'], key=lambda d: d['match'])
-        self.assertDictEqual({'key': 7, 'scale': 'IONIAN', 'name': 'G'}, biggest['form'])
+        self.logger.info(json['match'])
+        self.assertEqual(7, json['match'][0]['key'])
+        self.assertEqual('IONIAN', json['match'][0]['scale'])
