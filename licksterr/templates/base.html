@@ -5,6 +5,9 @@
         <meta charset="UTF-8">
         <title>Licksterr - {% block title %}{% endblock %}</title>
     {% endblock %}
+    {% block scripts %}
+        <script type=text/javascript src="{{ url_for('static', filename='jquery-3.3.1.min.js') }}"></script>
+    {% endblock %}
 </head>
 <body>
 <div id="content">

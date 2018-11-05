@@ -49,7 +49,7 @@ SCALES_DICT = {
 # True for major scales, False for minor scales
 SCALES_TYPE = {
     True: [Scale.IONIAN, Scale.LYDIAN, Scale.MIXOLYDIAN, Scale.MAJORPENTATONIC, Scale.MAJORBLUES],
-    False: [Scale.DORIAN, Scale.PHRYGIAN, Scale.MIXOLYDIAN, Scale.LOCRIAN, Scale.MINORPENTATONIC, Scale.MINORBLUES]
+    False: [Scale.DORIAN, Scale.PHRYGIAN, Scale.AEOLIAN, Scale.LOCRIAN, Scale.MINORPENTATONIC, Scale.MINORBLUES]
 }
 STANDARD_TUNING = [4, 11, 7, 2, 9, 4]
 FLOAT_PRECISION = 6
@@ -91,7 +91,6 @@ class Song(db.Model):
     tempo = db.Column(db.Integer)
     year = db.Column(db.Integer)
     hash = db.Column(db.String(128), unique=True)
-    keys = db.Column(ARRAY(db.Integer))
     tracks = db.relationship('Track')
 
     def __str__(self):
@@ -109,6 +108,8 @@ class Track(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     song_id = db.Column(db.Integer, db.ForeignKey('song.id'))
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
+    keys = db.Column(ARRAY(db.Integer))
+
     measures = association_proxy('track_measure', 'measure')
     forms = association_proxy('track_form', 'form')
 
@@ -270,14 +271,16 @@ class Measure(db.Model):
                     db.session.add(MeasureBeat(measure=measure, beat=beat, indexes=[i]))
                 else:
                     mb.indexes.append(i)
-                total_duration += Fraction(1 / beat.duration)
+                beat_duration = Fraction(1 / beat.duration)
+                total_duration += beat_duration
                 if beat.notes:
                     containing_forms = set(beat.notes[0].forms)
                     for note in beat.notes[1:]:
                         containing_forms.intersection_update(note.forms)
-                    form_match.update({form: form_match[form] + Fraction(1 / beat.duration)
-                                       for form in containing_forms})
-            form_match.update({k: form_match[k] / total_duration for k in form_match.keys()})
+                    for form in containing_forms:
+                        form_match[form] += beat_duration
+            for form in form_match:
+                form_match[form] /= total_duration
             for form, match in form_match.items():
                 db.session.add(FormMeasure(form=form, measure=measure, match=match))
         return measure

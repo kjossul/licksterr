@@ -33,7 +33,7 @@ class FlaskTest(LicksterrTest):
         files = [name for name in os.listdir(self.app.config['UPLOAD_DIR'])]
         self.assertEqual(1, len(files))
 
-    def _test_wywh(self):
+    def test_wywh(self):
         """Best match for wish you were here solo track should be G IONIAN, G form"""
         self.test_file_upload(TEST_ASSETS / "wish_you_were_here.gp5")
         url = self.get_server_url() + f"/tracks/2"  # solo guitar

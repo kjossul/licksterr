@@ -2,7 +2,7 @@ import logging
 
 from licksterr import setup_logging, create_app
 
-setup_logging()
+setup_logging(default_level=logging.DEBUG)
 app = create_app()
 
 logger = logging.getLogger(__name__)

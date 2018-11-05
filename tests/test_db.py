@@ -2,7 +2,7 @@ import logging
 
 from licksterr import ASSETS_DIR
 from licksterr.analyzer import parse_song
-from licksterr.models import Form, Scale, Note, Measure, NOTES_DICT, FormMeasure, Beat, Song
+from licksterr.models import Form, Scale, Note, Measure, NOTES_DICT, FormMeasure, Beat, Track
 from tests import LicksterrTest
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,8 @@ class TestDatabase(LicksterrTest):
 
     def test_ks_key_finder(self):
         parse_song(str(ASSETS_DIR / "tests/ks_test.gp5"))
-        song = Song.query.get(1)
-        self.assertListEqual([0], song.keys)  # C major should be identified
+        track = Track.query.get(1)
+        self.assertListEqual([0], track.keys)  # C major should be identified
 
     def _test_form_match(self, expected, key, scale, form, measure):
         form = Form.get(NOTES_DICT[key], scale, form)
