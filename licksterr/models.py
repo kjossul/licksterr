@@ -91,7 +91,7 @@ class Song(db.Model):
     tempo = db.Column(db.Integer)
     year = db.Column(db.Integer)
     hash = db.Column(db.String(128), unique=True)
-    tracks = db.relationship('Track')
+    tracks = db.relationship('Track', backref=db.backref("parent"), cascade='all,delete')
 
     def __str__(self):
         return f"{self.artist} - {self.title}"
@@ -106,12 +106,12 @@ class Track(db.Model):
     __tablename__ = 'track'
 
     id = db.Column(db.Integer, primary_key=True)
-    song_id = db.Column(db.Integer, db.ForeignKey('song.id'))
+    song_id = db.Column(db.Integer, db.ForeignKey('song.id', ondelete='CASCADE'))
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
     keys = db.Column(ARRAY(db.Integer))
 
-    measures = association_proxy('track_measure', 'measure')
-    forms = association_proxy('track_form', 'form')
+    measures = association_proxy('track_to_measure', 'measure')
+    forms = association_proxy('track_to_form', 'form')
 
     def __str__(self):
         song = Song.query.get(self.song_id)
@@ -145,8 +145,8 @@ class Form(db.Model):
     scale = db.Column(db.Enum(Scale), nullable=False)
     name = db.Column(db.String(), nullable=False)
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
-    measures = association_proxy('form_measure', 'measure')
-    notes = association_proxy('form_note', 'note')
+    measures = association_proxy('form_to_measure', 'measure')
+    notes = association_proxy('form_to_note', 'note')
 
     def __init__(self, note_list, key, scale, name, transpose=False, **kwargs):
         if transpose:
@@ -243,8 +243,8 @@ class Measure(db.Model):
     __tablename__ = 'measure'
 
     id = db.Column(db.String(), primary_key=True)
-    forms = association_proxy('form_measure', 'form')
-    beats = association_proxy('measure_beat', 'beat')
+    forms = association_proxy('measure_to_form', 'form')
+    beats = association_proxy('measure_to_beat', 'beat')
 
     def to_dict(self):
         info = row2dict(self)
@@ -291,7 +291,7 @@ class Beat(db.Model):
 
     id = db.Column(db.String(39), primary_key=True)  # 39 max length (6 notes * 6 ('SxFyyP') + 3 ('Dzz')
     duration = db.Column(db.Integer, nullable=False)  # duration of the note(s) (1 - whole, 2 - half, ...)
-    notes = association_proxy('beat_note', 'note')
+    notes = association_proxy('beat_to_note', 'note')
 
     def to_dict(self):
         return {'duration': self.duration, 'notes': [note.to_dict() for note in self.notes]}
@@ -322,7 +322,7 @@ class Note(db.Model):
     string = db.Column(db.Integer, nullable=False)
     fret = db.Column(db.Integer, nullable=False)
     muted = db.Column(db.Boolean, nullable=False, default=False)
-    forms = association_proxy('form_note', 'form')
+    forms = association_proxy('note_to_form', 'form')
 
     def __repr__(self):
         return f"S{self.string}F{self.fret:02}" + ('M' if self.muted else 'P')
@@ -338,13 +338,13 @@ class Note(db.Model):
 # Associations
 class TrackForm(db.Model):
     __tablename__ = 'track_form'
-    track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
-    form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
+    track_id = db.Column(db.Integer, db.ForeignKey('track.id', ondelete='cascade'), primary_key=True)
+    form_id = db.Column(db.Integer, db.ForeignKey('form.id', ondelete='cascade'), primary_key=True)
     # % of this form in the track
     match = db.Column(db.Float(precision=FLOAT_PRECISION))
     # relationships
-    track = db.relationship('Track', backref=db.backref('track_form', cascade='all, delete-orphan'))
-    form = db.relationship('Form')
+    track = db.relationship('Track', backref=db.backref('track_to_form', cascade='all, delete-orphan'))
+    form = db.relationship('Form', backref=db.backref('form_to_track', cascade='all, delete-orphan'))
 
     @classmethod
     def get_scale_scores(cls, track):
@@ -367,17 +367,18 @@ class TrackForm(db.Model):
             return instance
         return tf
 
+
 class TrackMeasure(db.Model):
     __tablename__ = 'track_measure'
 
-    track_id = db.Column(db.Integer, db.ForeignKey('track.id'), primary_key=True)
-    measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
+    track_id = db.Column(db.Integer, db.ForeignKey('track.id', ondelete='cascade'), primary_key=True)
+    measure_id = db.Column(db.String(), db.ForeignKey('measure.id', ondelete='cascade'), primary_key=True)
     # % that this measure occupies in the track
     match = db.Column(db.Float(precision=FLOAT_PRECISION))
     indexes = db.Column(db.ARRAY(db.Integer))
 
-    track = db.relationship('Track', backref=db.backref("track_measure", cascade='all, delete-orphan'))
-    measure = db.relationship('Measure')
+    track = db.relationship('Track', backref=db.backref("track_to_measure", cascade='all, delete-orphan'))
+    measure = db.relationship('Measure', backref=db.backref("measure_to_track", cascade='all, delete-orphan'))
 
     def __str__(self):
         return f"Match (track: {self.track}, measure: {self.measure}): {self.match}"
@@ -395,8 +396,8 @@ class FormMeasure(db.Model):
     # % of match between this form and this measure
     match = db.Column(db.Float(precision=FLOAT_PRECISION), nullable=False)
 
-    form = db.relationship('Form', backref=db.backref("form_measure", cascade='all, delete-orphan'))
-    measure = db.relationship('Measure')
+    form = db.relationship('Form', backref=db.backref("form_to_measure", cascade='all, delete-orphan'))
+    measure = db.relationship('Measure', backref=db.backref("measure_to_form", cascade='all, delete-orphan'))
 
     def __str__(self):
         return f"Match (form: {self.form}, measure: {self.measure}): {self.match}"
@@ -417,8 +418,8 @@ class MeasureBeat(db.Model):
     beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
     indexes = db.Column(ARRAY(db.Integer))
 
-    measure = db.relationship('Measure', backref=db.backref('measure_beat', cascade='all, delete-orphan'))
-    beat = db.relationship('Beat')
+    measure = db.relationship('Measure', backref=db.backref('measure_to_beat', cascade='all, delete-orphan'))
+    beat = db.relationship('Beat', backref=db.backref('beat_to_measure', cascade='all, delete-orphan'))
 
     @classmethod
     def get(cls, measure, beat):
@@ -432,8 +433,8 @@ class FormNote(db.Model):
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
     score = db.Column(db.Integer)
     # relationships
-    form = db.relationship('Form', backref=db.backref('form_note', cascade='all, delete-orphan'))
-    note = db.relationship('Note', backref=db.backref('form_note', cascade='all, delete-orphan'))
+    form = db.relationship('Form', backref=db.backref('form_to_note', cascade='all, delete-orphan'))
+    note = db.relationship('Note', backref=db.backref('note_to_form', cascade='all, delete-orphan'))
 
 
 class BeatNote(db.Model):
@@ -443,5 +444,5 @@ class BeatNote(db.Model):
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
     # todo store not effect here
     # relationships
-    beat = db.relationship('Beat', backref=db.backref('beat_note', cascade='all, delete-orphan'))
-    note = db.relationship('Note')
+    beat = db.relationship('Beat', backref=db.backref('beat_to_note', cascade='all, delete-orphan'))
+    note = db.relationship('Note', backref=db.backref('note_to_beat', cascade='all, delete-orphan'))

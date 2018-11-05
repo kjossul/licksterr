@@ -14,6 +14,21 @@ function addUploadListener() {
     });
 }
 
+function addRemoveListener() {
+    $('.remove-song-button').each(function (i, obj) {
+        obj.addEventListener("click", function (e) {
+            e.preventDefault();
+            $.ajax({
+                url: '/songs/' + obj.value,
+                type: 'DELETE',
+                success: function (result) {
+                    window.location.reload();
+                }
+            });
+        });
+    });
+}
+
 function uploadFile(file, tracks) {
     var fd = new FormData();
     fd.append("tab", file);
@@ -45,4 +60,5 @@ function uploadFile(file, tracks) {
 
 addEventListener("DOMContentLoaded", function () {
     addUploadListener();
+    addRemoveListener();
 }, true);

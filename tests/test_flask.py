@@ -3,7 +3,7 @@ import os
 
 import requests
 
-from licksterr.models import Measure
+from licksterr.models import Measure, Song, Track
 from tests import TEST_ASSETS, LicksterrTest
 
 
@@ -34,6 +34,13 @@ class FlaskTest(LicksterrTest):
         self.test_file_upload()
         files = [name for name in os.listdir(self.app.config['UPLOAD_DIR'])]
         self.assertEqual(1, len(files))
+
+    def test_song_delete(self):
+        self.test_file_upload()
+        delete_url = self.get_server_url() + '/songs/1'
+        requests.delete(delete_url)
+        self.assertFalse(Song.query.all())
+        self.assertFalse(Track.query.all())
 
     def _test_wywh(self):
         """Best match for wish you were here solo track should be G IONIAN, G form"""

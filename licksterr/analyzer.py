@@ -47,15 +47,25 @@ def get_tab_info(file, temp_dest):
 
 
 @analysis.route('/songs/<song_id>', methods=['GET'])
-def get_song_info(song_id):
+def get_song(song_id):
     song = Song.query.get(song_id)
     if not song:
         abort(404)
     return jsonify(song.to_dict())
 
 
+@analysis.route('/songs/<song_id>', methods=['DELETE'])
+def remove_song(song_id):
+    song = Song.query.get(song_id)
+    if not song:
+        abort(404)
+    db.session.delete(song)
+    db.session.commit()
+    return OK
+
+
 @analysis.route('/tracks/<track_id>', methods=['GET'])
-def get_track_info(track_id):
+def get_track(track_id):
     track = Track.query.get(track_id)
     if not track:
         abort(404)
@@ -63,7 +73,7 @@ def get_track_info(track_id):
 
 
 @analysis.route('/measures/<measure_id>', methods=['GET'])
-def get_measure_info(measure_id):
+def get_measure(measure_id):
     measure = Measure.query.get(measure_id)
     if not measure:
         abort(404)
