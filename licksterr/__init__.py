@@ -6,14 +6,13 @@ from pathlib import Path
 
 from flask import Flask
 
-from licksterr.models import db, Form
+from licksterr.models import db, Form, Note
 from licksterr.queries import init_db
 from licksterr.server import navigator
 from licksterr.song import song
 
 PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
-
 
 def setup_logging(path=os.path.join(ASSETS_DIR, 'logging.json'),
                   default_level=logging.INFO, env_key='LOG_CFG', to_file=True):
@@ -52,6 +51,6 @@ def create_app(config=None):
     app.app_context().push()
     db.init_app(app)
     db.create_all()
-    if not len(Form.query.all()):
+    if not len(Note.query.all()):
         init_db()
     return app

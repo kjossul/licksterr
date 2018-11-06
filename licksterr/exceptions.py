@@ -1,2 +1,2 @@
-class SongHashCollisionException(Exception):
+class BadTabException(Exception):
     pass

@@ -41,4 +41,4 @@ class LicksterrTest(LiveServerTestCase):
         with open(file, mode='rb') as f:
             content = f.read()
         files = {os.path.basename(file): content}
-        requests.post(url, files=files, data={'tracks': json.dumps(tracks)})
+        return requests.post(url, files=files, data={'tracks': json.dumps(tracks)})

@@ -26,9 +26,15 @@ class FlaskTest(LicksterrTest):
         files = [name for name in os.listdir(self.app.config['UPLOAD_DIR'])]
         self.assertEqual(1, len(files))
 
+    def test_wrong_file(self):
+        response = self.upload_file("wrong_file.gp5")
+        self.assertEqual(400, response.status_code)
+
     def test_song_delete(self):
         self.upload_file()
         delete_url = self.get_server_url() + '/songs/1'
         requests.delete(delete_url)
         self.assertFalse(Song.query.all())
         self.assertFalse(Track.query.all())
+        files = [name for name in os.listdir(self.app.config['UPLOAD_DIR'])]
+        self.assertEqual(0, len(files))

@@ -16,7 +16,7 @@
     <ul>
         {% for song, tracks in songs.items() %}
             {% for track in tracks %}
-                <li>{{ song|e }} () - track #{{ loop.index }}: {{ track }}</li>
+                <li>{{ song|e }} - track #{{ loop.index }}: {{ track }}</li>
                 <button value="{{ song.id }}" class="remove-song-button">Remove song</button>
             {% endfor %}
         {% endfor %}

@@ -1,6 +1,7 @@
 import hashlib
 import logging
 import os
+import struct
 from collections import defaultdict
 from fractions import Fraction
 from pathlib import Path
@@ -8,6 +9,7 @@ from pathlib import Path
 import guitarpro as gp
 from mingus.core import notes
 
+from licksterr.exceptions import BadTabException
 from licksterr.key_finder import KeyFinder
 from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure
 from licksterr.util import timing
@@ -22,13 +24,17 @@ KS_SECONDS = 1.5  # amount of seconds used to split segments in krumhansl-schmuc
 
 
 def parse_song(filename, tracks=None):
-    song = gp.parse(filename)
+    try:
+        song = gp.parse(filename)
+    except struct.error:
+        raise BadTabException("Cannot open tab file.")
     data = {
         "album": song.album,
         "artist": song.artist,
         "tempo": song.tempo,
         "title": song.title,
         "year": song.copyright if song.copyright else None,
+        "extension": filename[-3:]
     }
     with open(filename, mode='rb') as f:
         data['hash'] = str(hashlib.sha256(f.read()).digest()[:16])
@@ -81,7 +87,6 @@ def parse_track(song, track, tempo):
         segment_duration = 0
         note_durations = [0] * 12
     # Updates database objects
-    # fixme handle empty tab
     track = Track(song_id=song.id, tuning=tuning, keys=[])
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)

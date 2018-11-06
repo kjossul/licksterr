@@ -49,11 +49,11 @@ SCALES_DICT = {
 }
 # True for major scales, False for minor scales
 SCALES_TYPE = {
-    True: [Scale.IONIAN, Scale.LYDIAN, Scale.MIXOLYDIAN, Scale.MAJORPENTATONIC, Scale.MAJORBLUES],
-    False: [Scale.DORIAN, Scale.PHRYGIAN, Scale.AEOLIAN, Scale.LOCRIAN, Scale.MINORPENTATONIC, Scale.MINORBLUES]
+    True: [Scale.MAJORPENTATONIC, Scale.IONIAN, Scale.LYDIAN, Scale.MIXOLYDIAN, Scale.MAJORBLUES],
+    False: [Scale.MINORPENTATONIC, Scale.AEOLIAN, Scale.DORIAN, Scale.PHRYGIAN, Scale.LOCRIAN, Scale.MINORBLUES]
 }
 STANDARD_TUNING = [4, 11, 7, 2, 9, 4]
-FLOAT_PRECISION = 6
+FLOAT_PRECISION = 5
 
 
 class String:
@@ -92,7 +92,8 @@ class Song(db.Model):
     tempo = db.Column(db.Integer)
     year = db.Column(db.Integer)
     hash = db.Column(db.String(128), unique=True)
-    tracks = db.relationship('Track', backref=db.backref("parent"), cascade='all,delete')
+    extension = db.Column(db.String(3))
+    tracks = db.relationship('Track', backref=db.backref("song"), cascade='all,delete')
 
     def __str__(self):
         return f"{self.artist} - {self.title}"
@@ -135,12 +136,10 @@ class Track(db.Model):
                     score = fm.match * len(tm.indexes)
                     form_matches[form] += score
                     scale_matches[form.scale] += score
-        top_scale = max(scale_matches, key=scale_matches.get)
-        # sets the scale to the pentatonics if there are no differences in match todo testing
-        if top_scale == Scale.IONIAN and scale_matches[top_scale] == scale_matches[Scale.MAJORPENTATONIC]:
-            top_scale = Scale.MAJORPENTATONIC
-        elif top_scale == Scale.AEOLIAN and scale_matches[top_scale] == scale_matches[Scale.MINORPENTATONIC]:
-            top_scale = Scale.MINORPENTATONIC
+        # In case of ties, the order specified in SCALES_TYPE is used as tiebraker (0.0001 should be small enough to not
+        # alter significantly the results
+        top_scale = max(scale_matches,
+                        key=lambda scale: scale_matches[scale] - 10 ** (-3) * SCALES_TYPE[is_major].index(scale))
         for form, match in form_matches.items():
             if form.scale == top_scale:
                 tf = TrackForm(track=self, form=form, match=match / total_length)
@@ -158,11 +157,6 @@ class Track(db.Model):
             pass
 
     def to_dict(self):
-        """
-        Returns a description of this track
-        :param match: amount of scales to return, in descending order of match
-        :return:
-        """
         info = row2dict(self)
         info['match'] = []
         for k in self.keys:
@@ -201,7 +195,6 @@ class Form(db.Model):
         super().__init__(key=key, scale=scale, name=name, **kwargs)
         for note in note_list:
             # assigns a different score to each note based on the role it plays in the form
-            # todo implement krumhansl_schmuckler here?
             tuning = kwargs.get('tuning', STANDARD_TUNING)
             score = 1 if (tuning[note.string - 1] + note.fret) % 12 == key else 0.5
             db.session.add(FormNote(form=self, note=note, score=score))
@@ -313,8 +306,8 @@ class Measure(db.Model):
                 else:
                     mb.indexes.append(i)
                 beat_duration = Fraction(1 / beat.duration)
-                total_duration += beat_duration
                 if beat.notes:
+                    total_duration += beat_duration
                     containing_forms = set(beat.notes[0].forms)
                     for note in beat.notes[1:]:
                         containing_forms.intersection_update(note.forms)

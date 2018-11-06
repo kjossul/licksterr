@@ -10,5 +10,5 @@ navigator = Blueprint('navigator', __name__)
 
 @navigator.route('/', methods=['GET'])
 def home():
-    songs = {song: [track.to_dict() for track in song.tracks] for song in Song.query.all()}
+    songs = {song: [track.to_dict()['match'] for track in song.tracks] for song in Song.query.all()}
     return render_template('home.html', songs=songs), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}

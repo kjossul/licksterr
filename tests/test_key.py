@@ -9,7 +9,7 @@ class FlaskTest(LicksterrTest):
         self.match_scale("ks_test_0.gp5", 0, 'C', True, 'IONIAN')
 
     def test_ks_1(self):
-        self.match_scale("ks_test_1.gp5", 0, 'C', True, 'MIXOLYDIAN')
+        self.match_scale("ks_test_1.gp5", 0, 'C', True, 'MAJORPENTATONIC')
 
     def test_wywh(self):
         self.match_scale("wish_you_were_here.gp5", 2, 'G', True, 'IONIAN')

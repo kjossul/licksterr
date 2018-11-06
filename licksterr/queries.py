@@ -13,14 +13,14 @@ def init_db():
         for fret in range(0, 30):
             db.session.add(Note(string=string, fret=fret))
     db.session.commit()
-    logger.debug("Added notes to database. Generating forms..")
+    logger.debug("Generating forms..")
     for key, scale in yield_scales():
         logger.debug(f"Generating {key} {scale}")
         for form_name in 'CAGED':
             form = Form.calculate_caged_form(key, scale, form_name, transpose=True)
             db.session.add(form)
     db.session.commit()
-    logger.debug("Generated CAGED forms for standard tuning.")
+    logger.info("Database initialization completed.")
 
 
 def yield_scales(scales_list=SCALES_DICT.keys(), keys_list=None):

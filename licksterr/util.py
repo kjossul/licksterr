@@ -35,7 +35,7 @@ def flask_file_handler(f):
         extension = file.filename[-4:]
         if extension not in {'.gp3', '.gp4', '.gp5'}:
             abort(400)
-        temp_dest = str(current_app.config['TEMP_DIR'] / str(uuid.uuid1()))
+        temp_dest = str(current_app.config['TEMP_DIR'] / (str(uuid.uuid1()) + extension))
         file.save(temp_dest)
         logger.debug(f"temporarily uploaded to {temp_dest}.")
         response = f(file, temp_dest, *args, **kw)
