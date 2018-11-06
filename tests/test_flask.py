@@ -42,11 +42,18 @@ class FlaskTest(LicksterrTest):
         self.assertFalse(Song.query.all())
         self.assertFalse(Track.query.all())
 
-    def _test_wywh(self):
+    def test_wywh(self):
         """Best match for wish you were here solo track should be G IONIAN, G form"""
-        self.test_file_upload(TEST_ASSETS / "wish_you_were_here.gp5", tracks=[2])
-        url = self.get_server_url() + f"/tracks/1"  # solo guitar
+        self.match_scale("wish_you_were_here.gp5", 2, 'G', True, 'IONIAN')
+
+    def test_mad_world(self):
+        self.match_scale("mad_world.gp5", 2, 'F', False, 'DORIAN')
+
+    def match_scale(self, filename, track, key, is_major, scale):
+        self.test_file_upload(TEST_ASSETS / filename, tracks=[track])
+        url = self.get_server_url() + f"/tracks/1"
         json = requests.get(url).json()
-        self.logger.info(json['match'])
-        self.assertEqual(7, json['match'][0]['key'])
-        self.assertEqual('IONIAN', json['match'][0]['scale'])
+        d = json['match'][0]
+        self.assertEqual(key, d['key'])
+        self.assertEqual(is_major, d['isMajor'])
+        self.assertEqual(scale, d['scale'])

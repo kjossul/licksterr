@@ -8,7 +8,8 @@ from pathlib import Path
 import guitarpro as gp
 from mingus.core import notes
 
-from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, KEYS
+from licksterr.key_finder import KeyFinder
+from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure
 from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
@@ -20,8 +21,9 @@ ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 # fixme find right parameter tuning. Now I've set it such as analysis is done at the end of all song.
 MAJOR_PROFILES = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0]
 MINOR_PROFILES = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0]
-KS_SECONDS = 1000  # amount of seconds used to split segments in krumhansl-schmuckler alg
-KS_CHANGE_PENALTY = 0.75  # penalty for changing the key in the k-s alg
+KS_FLAT = True  # Whether scores should be flatted in binary system before feeding into the alg
+KS_SECONDS = 1.5  # amount of seconds used to split segments in krumhansl-schmuckler alg
+KS_CHANGE_PENALTY = 0.8  # penalty for changing the key in the k-s alg
 
 
 def parse_song(filename, tracks=None):
@@ -67,11 +69,11 @@ def parse_track(song, track, tempo):
     logger.info(f"Parsing track {track.name}")
     tuning = [notes.note_to_int(str(string)[0]) for string in track.strings]
     measure_match = defaultdict(list)  # measure: list of indexes the measure occupies in the track
-    key_match = []  # {key: list of keys found}
+    keyfinder = KeyFinder()
     note_durations = [0] * 12
     segment_duration = 0
     for i, m in enumerate(track.measures):
-        beats, durations = [], []
+        beats = []
         for beat in m.voices[0].beats:  # fixme handle multiple voices
             beat = Beat.get_or_create(beat)
             beats.append(beat)
@@ -87,40 +89,34 @@ def parse_track(song, track, tempo):
         measure_match[measure].append(i)
         # k-s analysis
         # tempo is expressed in quarters per minute. When we reached a segment long enough, start key analysis
-        if segment_duration * 4 * 60 / tempo >= KS_SECONDS or m is track.measures[-1]:
-            result = krumhansl_schmuckler(note_durations)
-            best_match = max(result, key=result.get)
-            if not key_match:
-                key_match.append(best_match)
-            else:
-                previous_key = result[key_match[-1]]
-                if best_match != previous_key and previous_key <= result[best_match] * KS_CHANGE_PENALTY:
-                    key_match.append(best_match)
-            segment_duration = 0
-            note_durations = [0] * 12
+        # if segment_duration * 4 * 60 / tempo >= KS_SECONDS or m is track.measures[-1]:
+        # Current implementation: make analysis at the end of each measure.
+        keyfinder.insert_durations(note_durations)
+        segment_duration = 0
+        note_durations = [0] * 12
     # Updates database objects
     # fixme handle empty tab
-    logger.debug(f"Found keys {key_match}")
-    track = Track(song_id=song.id, tuning=tuning, keys=key_match)
+    track = Track(song_id=song.id, tuning=tuning, keys=[])
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
-        # Calculates matches of track against form given the keys
-    for k in set(key_match):
+    # Calculates matches of track against form given the keys
+    results = keyfinder.get_results()
+    for k in set(results):
         track.add_key(k)
     return track
 
 
-def krumhansl_schmuckler(durations):
-    key_match = defaultdict(float)  # {(key, major?): score}
-    major_profiles = deque(MAJOR_PROFILES)
-    minor_profiles = deque(MINOR_PROFILES)
+def get_segment_score(durations, flat_scores=KS_FLAT):
+    scores = [0] * 24
+    durations = deque(durations)
+    if flat_scores:
+        durations = [1 if duration else 0 for duration in durations]
     for i in range(12):
-        key_match[KEYS.index((i, True))] = dot(durations, major_profiles)
-        key_match[KEYS.index((i, False))] = dot(durations, minor_profiles)
-        major_profiles.rotate(1)
-        minor_profiles.rotate(1)
-    return key_match
+        scores[i] += dot(durations, MAJOR_PROFILES)
+        scores[i + 12] += dot(durations, MINOR_PROFILES)
+        durations.rotate(-1)
+    return scores
 
 
 def dot(l1, l2):

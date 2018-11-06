@@ -124,8 +124,8 @@ class Track(db.Model):
         form_matches = defaultdict(float)
         scale_matches = defaultdict(float)
         total_length = 0
+        key, is_major = KEYS[key]
         for tm in TrackMeasure.get_measures(self):
-            key, is_major = KEYS[key]
             if any(beat.notes for beat in tm.measure.beats):
                 total_length += len(tm.indexes)
             for fm in FormMeasure.get_forms(tm.measure):
@@ -142,7 +142,7 @@ class Track(db.Model):
             top_scale = Scale.MINORPENTATONIC
         for form, match in form_matches.items():
             if form.scale == top_scale:
-                tf = TrackForm(track=self, form=form, match=match)
+                tf = TrackForm(track=self, form=form, match=match / total_length)
                 db.session.add(tf)
 
     def remove_key(self, key):
@@ -200,7 +200,7 @@ class Form(db.Model):
         super().__init__(key=key, scale=scale, name=name, **kwargs)
         for note in note_list:
             # assigns a different score to each note based on the role it plays in the form
-            # todo find better function (currently only assigns 1 to the root and 0.5 to others)
+            # todo implement krumhansl_schmuckler here?
             tuning = kwargs.get('tuning', STANDARD_TUNING)
             score = 1 if (tuning[note.string - 1] + note.fret) % 12 == key else 0.5
             db.session.add(FormNote(form=self, note=note, score=score))
@@ -408,6 +408,7 @@ class TrackMeasure(db.Model):
     # % that this measure occupies in the track
     match = db.Column(db.Float(precision=FLOAT_PRECISION))
     indexes = db.Column(db.ARRAY(db.Integer))
+    key = db.Column(db.Integer)
 
     track = db.relationship('Track', backref=db.backref("track_to_measure", cascade='all, delete-orphan'))
     measure = db.relationship('Measure', backref=db.backref("measure_to_track", cascade='all, delete-orphan'))

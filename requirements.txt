@@ -1,3 +1,4 @@
+anytree
 Flask
 Flask-SQLAlchemy
 Flask-Testing
