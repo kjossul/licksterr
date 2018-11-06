@@ -43,7 +43,6 @@ class FlaskTest(LicksterrTest):
         self.assertFalse(Track.query.all())
 
     def test_wywh(self):
-        """Best match for wish you were here solo track should be G IONIAN, G form"""
         self.match_scale("wish_you_were_here.gp5", 2, 'G', True, 'IONIAN')
 
     def test_mad_world(self):

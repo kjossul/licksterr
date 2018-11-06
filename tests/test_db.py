@@ -28,9 +28,11 @@ class TestDatabase(LicksterrTest):
         self._test_form_match(0.75, 'G', Scale.MAJORPENTATONIC, 'E', m)
 
     def test_ks_key_finder(self):
-        parse_song(str(ASSETS_DIR / "tests/ks_test.gp5"))
-        track = Track.query.get(1)
-        self.assertListEqual([0], track.keys)  # C major should be identified
+        parse_song(str(ASSETS_DIR / "tests/ks_test_0.gp5"))
+        parse_song(str(ASSETS_DIR / "tests/ks_test_1.gp5"))
+        for i in (1, 2):
+            track = Track.query.get(i)
+            self.assertListEqual([0], track.keys)  # C major should be identified
 
     def _test_form_match(self, expected, key, scale, form, measure):
         form = Form.get(NOTES_DICT[key], scale, form)

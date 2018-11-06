@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import os
-from collections import defaultdict, deque
+from collections import defaultdict
 from fractions import Fraction
 from pathlib import Path
 
@@ -18,25 +18,10 @@ PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 
-# fixme find right parameter tuning. Now I've set it such as analysis is done at the end of all song.
-MAJOR_PROFILES = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0]
-MINOR_PROFILES = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0]
-KS_FLAT = True  # Whether scores should be flatted in binary system before feeding into the alg
 KS_SECONDS = 1.5  # amount of seconds used to split segments in krumhansl-schmuckler alg
-KS_CHANGE_PENALTY = 0.8  # penalty for changing the key in the k-s alg
 
 
 def parse_song(filename, tracks=None):
-    GUITARS_CODES = {
-        24: "Nylon string guitar",
-        25: "Steel string guitar",
-        26: "Jazz Electric guitar",
-        27: "Clean guitar",
-        28: "Muted guitar",
-        29: "Overdrive guitar",
-        30: "Distortion guitar"
-    }
-    logger.info(f"Parsing song {filename}")
     song = gp.parse(filename)
     data = {
         "album": song.album,
@@ -49,9 +34,10 @@ def parse_song(filename, tracks=None):
         data['hash'] = str(hashlib.sha256(f.read()).digest()[:16])
     s = Song.query.filter_by(hash=data['hash']).first()
     if s:
-        logger.debug(f"Song with the same hash already found. All tracks parsed.")
+        logger.debug(f"Song with the same hash already found.")
         return s
     s = Song(**data)
+    logger.info(f"Parsing song {s}")
     for i, track in enumerate(song.tracks):
         if not tracks or i in tracks:
             t = parse_track(s, track, song.tempo)
@@ -105,24 +91,6 @@ def parse_track(song, track, tempo):
     for k in set(results):
         track.add_key(k)
     return track
-
-
-def get_segment_score(durations, flat_scores=KS_FLAT):
-    scores = [0] * 24
-    durations = deque(durations)
-    if flat_scores:
-        durations = [1 if duration else 0 for duration in durations]
-    for i in range(12):
-        scores[i] += dot(durations, MAJOR_PROFILES)
-        scores[i + 12] += dot(durations, MINOR_PROFILES)
-        durations.rotate(-1)
-    return scores
-
-
-def dot(l1, l2):
-    if len(l1) != len(l2):
-        return 0
-    return sum(i[0] * i[1] for i in zip(l1, l2))
 
 
 if __name__ == '__main__':

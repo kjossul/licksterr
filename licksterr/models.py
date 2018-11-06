@@ -32,6 +32,7 @@ class Scale(Enum):
 NOTES_DICT = {notes.int_to_note(value, accidental): value for value in range(12) for accidental in ('#', 'b')}
 
 KEYS = tuple((value, is_major) for is_major in (True, False) for value in range(12))
+KEY_NAMES = tuple('C')
 
 SCALES_DICT = {
     scales.Ionian: Scale.IONIAN,
@@ -135,7 +136,7 @@ class Track(db.Model):
                     form_matches[form] += score
                     scale_matches[form.scale] += score
         top_scale = max(scale_matches, key=scale_matches.get)
-        # sets the scale to the pentatonics if there are no differences in match
+        # sets the scale to the pentatonics if there are no differences in match todo testing
         if top_scale == Scale.IONIAN and scale_matches[top_scale] == scale_matches[Scale.MAJORPENTATONIC]:
             top_scale = Scale.MAJORPENTATONIC
         elif top_scale == Scale.AEOLIAN and scale_matches[top_scale] == scale_matches[Scale.MINORPENTATONIC]:

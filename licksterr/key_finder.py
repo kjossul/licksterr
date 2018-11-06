@@ -1,42 +1,45 @@
 import logging
 from collections import deque, defaultdict
 
-from anytree import AnyNode
-
 logger = logging.getLogger(__name__)
 
 
 class KeyFinder:
+    """
+    Class for finding the key of a song programmatically, given the
+    """
     MAJOR_PROFILES = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0]
     MINOR_PROFILES = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0]
     MODULATION_TOLERANCE = 0.3  # % of time a key has to be repeated to be considered a valid modulation
 
-    def __init__(self, penalty=0.8, flat=True):
-        self.leaves = self.get_new_gen()
+    def __init__(self, penalty=0.2, flat=True):
+        self.leaves = Node.get_new_roots()
         self.penalty = penalty
         self.flat = flat
 
     def get_results(self):
         node = max(self.leaves, key=lambda node: node.score)
-        keys = []
+        keys = defaultdict(float)
+        i = 0
         while node.parent:
-            keys.insert(0, node.key)
+            keys[node.key] += 1
             node = node.parent
-        # todo analyze modulations
+            i += 1
+        keys = {k: v / i for k, v in keys.items() if v / i >= self.MODULATION_TOLERANCE}
         logger.debug(keys)
-        return [max(keys, key=keys.count)]
+        return keys.keys()
 
     def insert_durations(self, durations):
         if not any(durations):
             return
         scores = self.get_segment_score(durations)
         possible_children = defaultdict(list)  # {root: list of possible children for this node}
-        next_gen = self.get_new_gen()
+        next_gen = Node.get_new_roots()
         for root in self.leaves:
             for j, score in enumerate(scores):
                 penalized_score = root.score + score * (1 if root.key == j else self.penalty)
                 if penalized_score > next_gen[j].score:
-                    next_gen[j] = KeyNode(key=j, score=penalized_score)
+                    next_gen[j] = Node(key=j, score=penalized_score)
                 if penalized_score >= next_gen[j].score:
                     possible_children[root].append(next_gen[j])
         for parent, children in possible_children.items():
@@ -60,24 +63,25 @@ class KeyFinder:
         return scores
 
     @staticmethod
-    def get_new_gen():
-        return [KeyNode(key=key, score=0) for key in range(24)]
-
-    @staticmethod
     def dot(l1, l2):
         if len(l1) != len(l2):
             return 0
         return sum(i[0] * i[1] for i in zip(l1, l2))
 
 
-class KeyNode(AnyNode):
+class Node:
     def __init__(self, key, score, **kwargs):
         super().__init__(**kwargs)
         self.key = key
         self.score = round(score, 2)
+        self.parent = None
 
     def __str__(self):
         return f"{self.key} - {self.score}"
 
     def get_upwards_score(self):
         return self.score + (self.parent.get_upwards_score() if self.parent else 0)
+
+    @classmethod
+    def get_new_roots(cls, n=24):
+        return [cls(key=key, score=0) for key in range(n)]
