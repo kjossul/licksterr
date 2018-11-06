@@ -6,7 +6,8 @@ logger = logging.getLogger(__name__)
 
 class KeyFinder:
     """
-    Class for finding the key of a song programmatically, given the
+    Class for finding the key of a song programmatically. The procedure works as follows:
+    todo doc
     """
     MAJOR_PROFILES = [5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0]
     MINOR_PROFILES = [5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0]
@@ -26,7 +27,6 @@ class KeyFinder:
             node = node.parent
             i += 1
         keys = {k: v / i for k, v in keys.items() if v / i >= self.MODULATION_TOLERANCE}
-        logger.debug(keys)
         return keys.keys()
 
     def insert_durations(self, durations):

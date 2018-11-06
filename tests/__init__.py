@@ -1,8 +1,10 @@
 import glob
+import json
 import logging
 import os
 from pathlib import Path
 
+import requests
 from flask_testing import LiveServerTestCase
 from sqlalchemy import text
 
@@ -31,3 +33,12 @@ class LicksterrTest(LiveServerTestCase):
         app = create_app(config='tests.config')
         self.logger = logging.getLogger(__name__)
         return app
+
+    def upload_file(self, filename="test.gp5", tracks=None):
+        file = TEST_ASSETS / filename
+        url = self.get_server_url() + "/upload"
+        tracks = [0] if not tracks else tracks
+        with open(file, mode='rb') as f:
+            content = f.read()
+        files = {os.path.basename(file): content}
+        requests.post(url, files=files, data={'tracks': json.dumps(tracks)})

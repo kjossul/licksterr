@@ -32,16 +32,15 @@ def flask_file_handler(f):
             logger.debug("Received upload request without files.")
             abort(400)
         file = list(request.files.values())[0]
-        if file:
-            extension = file.filename[-4:]
-            if extension not in {'.gp3', '.gp4', '.gp5'}:
-                abort(400)
-            temp_dest = str(current_app.config['TEMP_DIR'] / str(uuid.uuid1()))
-            file.save(temp_dest)
-            logger.debug(f"temporarily uploaded to {temp_dest}.")
-            response = f(file, temp_dest, *args, **kw)
-            os.remove(temp_dest)
-            logger.debug("Removed file at temporary destination.")
+        extension = file.filename[-4:]
+        if extension not in {'.gp3', '.gp4', '.gp5'}:
+            abort(400)
+        temp_dest = str(current_app.config['TEMP_DIR'] / str(uuid.uuid1()))
+        file.save(temp_dest)
+        logger.debug(f"temporarily uploaded to {temp_dest}.")
+        response = f(file, temp_dest, *args, **kw)
+        os.remove(temp_dest)
+        logger.debug("Removed file at temporary destination.")
         return response
 
     return wrap
