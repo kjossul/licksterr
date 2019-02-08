@@ -2,3 +2,4 @@
 instance/
 venv/
 *.sock
+playgrounds/
