@@ -8,6 +8,7 @@ from flask_sqlalchemy import SQLAlchemy
 from mingus.core import notes, scales
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.associationproxy import association_proxy
+from sqlalchemy.ext.mutable import MutableList
 
 from licksterr.util import row2dict
 
@@ -35,6 +36,7 @@ KEYS = tuple((value, is_major) for is_major in (True, False) for value in range(
 KEY_NAMES = tuple('C')
 
 SCALES_DICT = {
+    # scale to enum
     scales.Ionian: Scale.IONIAN,
     scales.Dorian: Scale.DORIAN,
     scales.Phrygian: Scale.PHRYGIAN,
@@ -45,7 +47,22 @@ SCALES_DICT = {
     scales.MinorPentatonic: Scale.MINORPENTATONIC,
     scales.MajorPentatonic: Scale.MAJORPENTATONIC,
     scales.MinorBlues: Scale.MINORBLUES,
-    scales.MajorBlues: Scale.MAJORBLUES
+    scales.MajorBlues: Scale.MAJORBLUES,
+}
+
+ENUM_DICT = {
+    # enum to scale
+    Scale.IONIAN: scales.Ionian,
+    Scale.DORIAN: scales.Dorian,
+    Scale.PHRYGIAN: scales.Phrygian,
+    Scale.LYDIAN: scales.Lydian,
+    Scale.MIXOLYDIAN: scales.Mixolydian,
+    Scale.AEOLIAN: scales.Aeolian,
+    Scale.LOCRIAN: scales.Locrian,
+    Scale.MINORPENTATONIC: scales.MinorPentatonic,
+    Scale.MAJORPENTATONIC: scales.MajorPentatonic,
+    Scale.MINORBLUES: scales.MinorBlues,
+    Scale.MAJORBLUES: scales.MajorBlues
 }
 # True for major scales, False for minor scales
 SCALES_TYPE = {
@@ -156,17 +173,21 @@ class Track(db.Model):
         except ValueError:
             pass
 
-    def to_dict(self):
-        info = row2dict(self)
-        info['match'] = []
+    def get_form_match(self):
+        match = []
         for k in self.keys:
             key, is_major = KEYS[k]
             key_result = {'key': notes.int_to_note(key), 'isMajor': is_major, 'forms': defaultdict(float)}
             for tf in TrackForm.get_forms(self):
                 if tf.form.key == key:
-                    key_result['forms'][tf.form.name] = tf.match
+                    key_result['forms'][tf.form.id] = tf.match
                     key_result['scale'] = tf.form.scale.name
-            info['match'].append(key_result)
+            match.append(key_result)
+        return match
+
+    def to_dict(self):
+        info = row2dict(self)
+        info['match'] = self.get_form_match()
         return info
 
 
@@ -196,8 +217,8 @@ class Form(db.Model):
         for note in note_list:
             # assigns a different score to each note based on the role it plays in the form
             tuning = kwargs.get('tuning', STANDARD_TUNING)
-            score = 1 if (tuning[note.string - 1] + note.fret) % 12 == key else 0.5
-            db.session.add(FormNote(form=self, note=note, score=score))
+            degree = ((tuning[note.string - 1] + note.fret) % 12 - key) % 12
+            db.session.add(FormNote(form=self, note=note, degree=degree))
 
     def __str__(self):
         return f"{self.key} {self.scale} {self.forms}"
@@ -401,7 +422,7 @@ class TrackMeasure(db.Model):
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id', ondelete='cascade'), primary_key=True)
     # % that this measure occupies in the track
     match = db.Column(db.Float(precision=FLOAT_PRECISION))
-    indexes = db.Column(db.ARRAY(db.Integer))
+    indexes = db.Column(MutableList.as_mutable(ARRAY(db.INTEGER)))
     key = db.Column(db.Integer)
 
     track = db.relationship('Track', backref=db.backref("track_to_measure", cascade='all, delete-orphan'))
@@ -443,7 +464,7 @@ class MeasureBeat(db.Model):
 
     measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
     beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
-    indexes = db.Column(ARRAY(db.Integer))
+    indexes = db.Column(MutableList.as_mutable(ARRAY(db.INTEGER)))
 
     measure = db.relationship('Measure', backref=db.backref('measure_to_beat', cascade='all, delete-orphan'))
     beat = db.relationship('Beat', backref=db.backref('beat_to_measure', cascade='all, delete-orphan'))
@@ -458,7 +479,7 @@ class FormNote(db.Model):
 
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
-    score = db.Column(db.Integer)
+    degree = db.Column(db.Integer)
     # relationships
     form = db.relationship('Form', backref=db.backref('form_to_note', cascade='all, delete-orphan'))
     note = db.relationship('Note', backref=db.backref('note_to_form', cascade='all, delete-orphan'))

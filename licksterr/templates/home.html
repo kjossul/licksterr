@@ -2,7 +2,12 @@
 {% block title %}Home{% endblock %}
 {% block scripts %}
     {{ super() }}
-    <script src="{{ url_for('static', filename='licksterr.js') }}"></script>
+    <script>
+        addEventListener("DOMContentLoaded", function () {
+            addUploadListener();
+            addRemoveListener();
+        }, true);
+    </script>
 {% endblock %}
 {% block content %}
     <h1>Upload file</h1>
@@ -12,13 +17,17 @@
         <span id="uploadPlaceholder"></span>
     </div>
     <div id="trackSelect"></div>
-    <h1>Analysis list</h1>
-    <ul>
+    <h1>Analyzed songs</h1>
+    <ul class="decimal">
         {% for song, tracks in songs.items() %}
-            {% for track in tracks %}
-                <li>{{ song|e }} - track #{{ loop.index }}: {{ track }}</li>
+            <li>{{ song|e }}
                 <button value="{{ song.id }}" class="remove-song-button">Remove song</button>
-            {% endfor %}
+                <ul class="circle">
+                    {% for track in tracks %}
+                        <li><a href="/reader?track={{ track }}">track #{{ loop.index }}</a></li>
+                    {% endfor %}
+                </ul>
+            </li>
         {% endfor %}
     </ul>
 {% endblock %}

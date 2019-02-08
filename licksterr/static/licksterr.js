@@ -57,8 +57,3 @@ function uploadFile(file, tracks) {
         }
     });
 }
-
-addEventListener("DOMContentLoaded", function () {
-    addUploadListener();
-    addRemoveListener();
-}, true);
