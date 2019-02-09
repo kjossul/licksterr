@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import struct
@@ -16,23 +17,27 @@ song = Blueprint('song', __name__)
 
 @song.route('/upload', methods=['POST'])
 @flask_file_handler
-def upload_file(file, temp_dest):
+def upload_file(file, temp_file):
     tracks = request.values.get('tracks', None)
     tracks = json.loads(tracks) if tracks else None
     try:
-        song = parse_song(temp_dest, tracks=[int(track) for track in tracks])
+        content = temp_file.read()
+        temp_file.seek(0)
+        h = str(hashlib.sha256(content).digest()[:16])
+        s = parse_song(temp_file, tracks=[int(track) for track in tracks], extension=file.filename[-3:], hash=h)
+        with open(str(current_app.config['UPLOAD_DIR'] / (str(s.id))), mode="wb") as f:
+            f.write(content)
     except BadTabException:
         abort(400)
-    file.save(str(current_app.config['UPLOAD_DIR'] / (str(song.id))))
-    logger.debug(f"Successfully parsed song {song}")
+    logger.debug(f"Successfully parsed song {s}")
     return OK
 
 
 @song.route('/tabinfo', methods=['POST'])
 @flask_file_handler
-def get_tab_info(file, temp_dest):
+def get_tab_info(file, temp_file):
     try:
-        song = gp.parse(temp_dest)
+        song = gp.parse(temp_file)
     except struct.error:
         abort(400)
     return jsonify({i: track.name for i, track in enumerate(song.tracks) if len(track.strings) == 6})
@@ -67,7 +72,7 @@ def remove_song(song_id):
         abort(404)
     db.session.delete(song)
     os.remove(current_app.config['UPLOAD_DIR'] / str(song_id))
-    logger.debug("Removed file at temporary destination.")
+    logger.debug("Removed file on disk.")
     db.session.commit()
     return OK
 

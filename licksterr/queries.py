@@ -42,7 +42,11 @@ def get_track_interval_list(track):
         for mb in MeasureBeat.query.filter_by(measure_id=tm.measure_id):
             degrees = []
             for bn in BeatNote.query.filter_by(beat_id=mb.beat_id):
-                degrees.append(notes_dict[bn.note_id])
+                try:
+                    degrees.append([notes_dict[bn.note_id]])
+                except KeyError:
+                    logger.debug(f"No scale degree recognized at beat #{mb.indexes}")
+                    degrees.append([])
             for i in mb.indexes:
                 beat_dict[i] = degrees
         for i in tm.indexes:

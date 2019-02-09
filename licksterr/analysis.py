@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import os
 import struct
@@ -23,9 +22,10 @@ ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 KS_SECONDS = 1.5  # amount of seconds used to split segments in krumhansl-schmuckler alg
 
 
-def parse_song(filename, tracks=None):
+def parse_song(file, tracks=None, extension="", hash=""):
     try:
-        song = gp.parse(filename)
+        file.seek(0)
+        song = gp.parse(file)
     except struct.error:
         raise BadTabException("Cannot open tab file.")
     data = {
@@ -34,10 +34,9 @@ def parse_song(filename, tracks=None):
         "tempo": song.tempo,
         "title": song.title,
         "year": song.copyright if song.copyright else None,
-        "extension": filename[-3:]
+        "extension": extension,
+        "hash": hash
     }
-    with open(filename, mode='rb') as f:
-        data['hash'] = str(hashlib.sha256(f.read()).digest()[:16])
     s = Song.query.filter_by(hash=data['hash']).first()
     if s:
         logger.debug(f"Song with the same hash already found.")
@@ -46,7 +45,7 @@ def parse_song(filename, tracks=None):
     logger.info(f"Parsing song {s}")
     for i, track in enumerate(song.tracks):
         if not tracks or i in tracks:
-            t = parse_track(s, track, song.tempo)
+            t = parse_track(s, track, i)
             s.tracks.append(t)
     db.session.add(s)
     db.session.commit()
@@ -54,7 +53,7 @@ def parse_song(filename, tracks=None):
 
 
 @timing
-def parse_track(song, track, tempo):
+def parse_track(song, track, index):
     """
     Iterates the track beat by beat and checks for matches
     """
@@ -87,7 +86,7 @@ def parse_track(song, track, tempo):
         segment_duration = 0
         note_durations = [0] * 12
     # Updates database objects
-    track = Track(song_id=song.id, tuning=tuning, keys=[])
+    track = Track(song_id=song.id, tuning=tuning, keys=[], index=index)
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)

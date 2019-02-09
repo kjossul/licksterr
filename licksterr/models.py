@@ -126,6 +126,7 @@ class Track(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     song_id = db.Column(db.Integer, db.ForeignKey('song.id', ondelete='CASCADE'))
+    index = db.Column(db.Integer)  # Index of the track in the song
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
     keys = db.Column(ARRAY(db.Integer))
 

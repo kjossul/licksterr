@@ -19,11 +19,11 @@
     <div id="trackSelect"></div>
     <h1>Analyzed songs</h1>
     <ul class="decimal">
-        {% for song, tracks in songs.items() %}
+        {% for song, d in songs.items() %}
             <li>{{ song|e }}
                 <button value="{{ song.id }}" class="remove-song-button">Remove song</button>
                 <ul class="circle">
-                    {% for track in tracks %}
+                    {% for track in d["tracks"] %}
                         <li><a href="/reader?track={{ track }}">track #{{ loop.index }}</a></li>
                     {% endfor %}
                 </ul>

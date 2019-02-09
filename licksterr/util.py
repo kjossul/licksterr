@@ -1,11 +1,10 @@
 import json
 import logging
-import os
-import uuid
+import tempfile
 from functools import wraps
 from time import time
 
-from flask import request, abort, current_app
+from flask import request, abort
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +34,12 @@ def flask_file_handler(f):
         extension = file.filename[-4:]
         if extension not in {'.gp3', '.gp4', '.gp5'}:
             abort(400)
-        temp_dest = str(current_app.config['TEMP_DIR'] / (str(uuid.uuid1()) + extension))
-        file.save(temp_dest)
-        logger.debug(f"temporarily uploaded to {temp_dest}.")
-        response = f(file, temp_dest, *args, **kw)
-        os.remove(temp_dest)
-        logger.debug("Removed file at temporary destination.")
-        return response
+        contents = file.read()
+        with tempfile.TemporaryFile() as temp_file:
+            temp_file.write(contents)
+            temp_file.seek(0)
+            response = f(file, temp_file, *args, **kw)
+            return response
 
     return wrap
 
