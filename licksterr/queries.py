@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 def init_db():
     logger.debug("Adding notes to database")
+    db.session.add(Note(string=0, fret=0))  # "Pause" note
     for string in range(1, 7):
         for fret in range(0, 30):
             db.session.add(Note(string=string, fret=fret))

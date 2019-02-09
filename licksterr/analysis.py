@@ -9,7 +9,7 @@ import guitarpro as gp
 from mingus.core import notes
 
 from licksterr.exceptions import BadTabException
-from licksterr.key_finder import KeyFinder
+from licksterr.key_finder import KeyFinderAggregator
 from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure
 from licksterr.util import timing
 
@@ -60,19 +60,22 @@ def parse_track(song, track, index):
     logger.info(f"Parsing track {track.name}")
     tuning = [notes.note_to_int(str(string)[0]) for string in track.strings]
     measure_match = defaultdict(list)  # measure: list of indexes the measure occupies in the track
-    keyfinder = KeyFinder()
+    finder = KeyFinderAggregator()
     note_durations = [0] * 12
     segment_duration = 0
+    prev_beat = None  # used to correctly store tied note information
     for i, m in enumerate(track.measures):
         beats = []
         for beat in m.voices[0].beats:  # fixme handle multiple voices
-            beat = Beat.get_or_create(beat)
+            beat = Beat.get_or_create(beat, prev_beat=prev_beat)
             beats.append(beat)
+            prev_beat = beat
             # k-s analysis
             beat_duration = Fraction(1 / beat.duration)
             for note in beat.notes:
-                note_value = (tuning[note.string - 1] + note.fret) % 12
-                note_durations[note_value] += beat_duration
+                if note.string > 0:  # if it's not a pause beat
+                    note_value = (tuning[note.string - 1] + note.fret) % 12
+                    note_durations[note_value] += beat_duration
             # Does not increment segment duration if we had just pauses since now
             if any(duration for duration in note_durations):
                 segment_duration += beat_duration
@@ -82,7 +85,7 @@ def parse_track(song, track, index):
         # tempo is expressed in quarters per minute. When we reached a segment long enough, start key analysis
         # if segment_duration * 4 * 60 / tempo >= KS_SECONDS or m is track.measures[-1]:
         # Current implementation: make analysis at the end of each measure.
-        keyfinder.insert_durations(note_durations)
+        finder.insert_durations(note_durations)
         segment_duration = 0
         note_durations = [0] * 12
     # Updates database objects
@@ -91,7 +94,7 @@ def parse_track(song, track, index):
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
     # Calculates matches of track against form given the keys
-    results = keyfinder.get_results()
+    results = finder.get_results()
     for k in set(results):
         track.add_key(k)
     return track

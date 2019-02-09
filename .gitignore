@@ -3,3 +3,7 @@ instance/
 venv/
 *.sock
 playgrounds/
+
+# IDE stuff
+.idea/
+node_modules/

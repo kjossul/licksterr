@@ -5,6 +5,7 @@ from enum import Enum
 from fractions import Fraction
 
 from flask_sqlalchemy import SQLAlchemy
+from guitarpro import NoteType
 from mingus.core import notes, scales
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.associationproxy import association_proxy
@@ -353,17 +354,28 @@ class Beat(db.Model):
         return {'duration': self.duration, 'notes': [note.to_dict() for note in self.notes]}
 
     @classmethod
-    def get_or_create(cls, beat):
+    def get_or_create(cls, beat, prev_beat=None):
         if len(beat.notes) > 6:
             raise ValueError("Can't have more than two notes per string!")
-        notes = tuple(Note.get(note.string, note.value)
-                      for note in sorted(beat.notes, key=lambda note: (note.string, note.value)))
-        id = ''.join(repr(note) for note in notes) + f'D{beat.duration.value:02}'
+        ns = []
+        if not beat.notes:  # Pause beat
+            ns.append(Note.get(0, 0))
+        else:
+            for note in beat.notes:
+                if note.type == NoteType.tie and prev_beat:
+                    try:
+                        ns.append(next(prev_note for prev_note in prev_beat.notes if note.string == prev_note.string))
+                    except StopIteration:
+                        logger.debug(
+                            f"Found tie to non existing note at measure {beat.voice.measure.number} (skipping)")
+                else:
+                    ns.append(Note.get(note.string, note.value))
+        id = ''.join(repr(note) for note in ns) + f'D{beat.duration.value:02}'
         b = Beat.query.get(id)
         if not b:
             b = Beat(id=id, duration=beat.duration.value)
             db.session.add(b)
-            for note in notes:
+            for note in ns:
                 db.session.add(BeatNote(beat=b, note=note))
         return b
 
