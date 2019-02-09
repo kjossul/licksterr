@@ -18,8 +18,8 @@ def home(req_path):
     return render_template('home.html', songs=songs), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}
 
 
-@navigator.route('/reader', methods=['GET'])
-def viewer():
+@navigator.route('/player', methods=['GET'])
+def player():
     track_id = request.args.get("track")
     track = Track.query.get(track_id)
     if not track:
@@ -27,7 +27,7 @@ def viewer():
     song = Song.query.get(track.song_id)
     filename = str(current_app.config['UPLOAD_DIR'] / (str(track.song_id)))
     interval_list = get_track_interval_list(track)
-    return render_template('reader.html', song=song, filename=filename,
+    return render_template('player.html', song=song, filename=filename,
                            interval_list=interval_list), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}
 
 

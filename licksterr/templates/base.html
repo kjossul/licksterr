@@ -6,9 +6,10 @@
         <title>Licksterr - {% block title %}{% endblock %}</title>
     {% endblock %}
     {% block scripts %}
-        <script type=text/javascript src="{{ url_for('static', filename='vendors/jquery-3.3.1.min.js') }}"></script>
+        <script type=text/javascript src="{{ url_for('static', filename='vendors/js/jquery-2.2.3.min.js') }}"></script>
         <script src="{{ url_for('static', filename='licksterr.js') }}"></script>
     {% endblock %}
+    {% block css %}{% endblock %}
 </head>
 <body>
 <div id="content">
