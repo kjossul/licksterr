@@ -26,8 +26,8 @@ def player():
         abort(404)
     song = Song.query.get(track.song_id)
     filename = str(current_app.config['UPLOAD_DIR'] / (str(track.song_id)))
-    interval_list = get_track_interval_list(track)
-    return render_template('player.html', song=song, filename=filename,
+    interval_list = get_track_interval_list(track, include_rests=False, include_ties=False)
+    return render_template('player.html', song=song, filename=filename, track_index=track.index,
                            interval_list=interval_list), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}
 
 

@@ -359,24 +359,27 @@ class Beat(db.Model):
             raise ValueError("Can't have more than two notes per string!")
         ns = []
         if not beat.notes:  # Pause beat
-            ns.append(Note.get(0, 0))
+            ns.append((Note.get(0, 0), False))
         else:
             for note in beat.notes:
                 if note.type == NoteType.tie and prev_beat:
                     try:
-                        ns.append(next(prev_note for prev_note in prev_beat.notes if note.string == prev_note.string))
+                        ns.append((next(prev_note for prev_note in prev_beat.notes if note.string == prev_note.string),
+                                   True))
                     except StopIteration:
                         logger.debug(
                             f"Found tie to non existing note at measure {beat.voice.measure.number} (skipping)")
                 else:
-                    ns.append(Note.get(note.string, note.value))
-        id = ''.join(repr(note) for note in ns) + f'D{beat.duration.value:02}'
+                    ns.append((Note.get(note.string, note.value), False))
+        # Fixme this is an ugly hack to show the circles in the correct positions but it's wrong
+        # Prolly I need to differentiate tied and untied notes.
+        id = ''.join(repr(note) for note, tie in ns if not tie) + f'D{beat.duration.value:02}'
         b = Beat.query.get(id)
         if not b:
             b = Beat(id=id, duration=beat.duration.value)
             db.session.add(b)
-            for note in ns:
-                db.session.add(BeatNote(beat=b, note=note))
+            for note, tie in ns:
+                db.session.add(BeatNote(beat=b, note=note, tie=tie))
         return b
 
 
@@ -503,6 +506,7 @@ class BeatNote(db.Model):
 
     beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
     note_id = db.Column(db.Integer, db.ForeignKey('note.id'), primary_key=True)
+    tie = db.Column(db.Boolean)
     # todo store not effect here
     # relationships
     beat = db.relationship('Beat', backref=db.backref('beat_to_note', cascade='all, delete-orphan'))

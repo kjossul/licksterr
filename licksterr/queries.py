@@ -35,7 +35,7 @@ def yield_scales(scales_list=SCALES_DICT.keys(), keys_list=None):
             yield key, scale
 
 
-def get_track_interval_list(track):
+def get_track_interval_list(track, include_rests=True, include_ties=True):
     notes_dict = get_track_notes_degree_dict(track)
     measure_dict = {}  # measure : beat_list
     for tm in TrackMeasure.query.filter_by(track_id=track.id):
@@ -44,7 +44,8 @@ def get_track_interval_list(track):
             degrees = []
             for bn in BeatNote.query.filter_by(beat_id=mb.beat_id):
                 try:
-                    degrees.append([notes_dict[bn.note_id]])
+                    if (include_rests or bn.note.string != 0) and (include_ties or not bn.tie):
+                        degrees.append([notes_dict[bn.note_id]])
                 except KeyError:
                     logger.debug(f"No scale degree recognized at beat #{mb.indexes}")
                     degrees.append([])
