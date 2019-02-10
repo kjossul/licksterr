@@ -3,7 +3,6 @@ import logging
 from flask import Blueprint, render_template, request, abort, current_app, send_file
 
 from licksterr.models import Song, Track
-from licksterr.queries import get_track_interval_list
 
 logger = logging.getLogger(__name__)
 navigator = Blueprint('navigator', __name__)
@@ -26,9 +25,8 @@ def player():
         abort(404)
     song = Song.query.get(track.song_id)
     filename = str(current_app.config['UPLOAD_DIR'] / (str(track.song_id)))
-    interval_list = get_track_interval_list(track, include_rests=False, include_ties=False)
     return render_template('player.html', song=song, filename=filename, track_index=track.index,
-                           interval_list=interval_list), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}
+                           interval_list=track.intervals), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}
 
 
 def get_file(filename):

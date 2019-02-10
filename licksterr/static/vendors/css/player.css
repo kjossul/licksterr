@@ -78,3 +78,7 @@
     font-size: 34px;
     overflow: visible !important;
 }
+
+#content {
+    margin-top: 20px;
+}

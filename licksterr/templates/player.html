@@ -20,9 +20,9 @@
             at.alphaTab({
                 file: '{{ filename }}',
                 tracks: [{{ track_index }}],
+                lazy: false
             });
-            createNoteCircles({{ interval_list|tojson }}, ["red"].concat(new Array(11).fill(null)));
-        })
+        });
     </script>
 {% endblock %}
 {% block css %}
@@ -95,16 +95,19 @@
                     <!-- Note highlight options tool -->
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true"
-                           aria-expanded="false" id="highlightOptions">
-                            Options
+                           aria-expanded="false" id="highlightOptions"
+                           onclick="createNoteCircles({{ interval_list|tojson }}, ['red'].concat(new Array(11).fill(null)))">
+                            Highlight
                         </a>
                     </li>
                 </ul>
             </div>
         </div>
     </nav>
-    <div id="alphaTab" data-file="{{ filename }}" data-tracks="{{ track_index }}"
-         data-player="{{ url_for('static', filename="vendors/js/alphaTab/default.sf2") }}"
-         data-player-offset="[-10,-70]" class="alphaTab" style="position: relative; text-align: left;">
+    <div id="content">
+        <div id="alphaTab" data-file="{{ filename }}" data-tracks="{{ track_index }}"
+             data-player="{{ url_for('static', filename="vendors/js/alphaTab/default.sf2") }}"
+             data-player-offset="[-10,-70]" class="alphaTab" style="position: relative; text-align: left;">
+        </div>
     </div>
 {% endblock %}

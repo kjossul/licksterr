@@ -130,6 +130,7 @@ class Track(db.Model):
     index = db.Column(db.Integer)  # Index of the track in the song
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
     keys = db.Column(ARRAY(db.Integer))
+    intervals = db.Column(ARRAY(db.Integer))
 
     measures = association_proxy('track_to_measure', 'measure')
     forms = association_proxy('track_to_form', 'form')
@@ -371,9 +372,7 @@ class Beat(db.Model):
                             f"Found tie to non existing note at measure {beat.voice.measure.number} (skipping)")
                 else:
                     ns.append((Note.get(note.string, note.value), False))
-        # Fixme this is an ugly hack to show the circles in the correct positions but it's wrong
-        # Prolly I need to differentiate tied and untied notes.
-        id = ''.join(repr(note) for note, tie in ns if not tie) + f'D{beat.duration.value:02}'
+        id = ''.join(repr(note) for note, _ in ns) + f'D{beat.duration.value:02}'
         b = Beat.query.get(id)
         if not b:
             b = Beat(id=id, duration=beat.duration.value)
