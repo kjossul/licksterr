@@ -1,6 +1,7 @@
 Flask
 Flask-SQLAlchemy
 Flask-Testing
+fretboard
 Pillow
 psycopg2-binary
 PyGuitarPro

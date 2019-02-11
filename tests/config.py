@@ -6,9 +6,11 @@ DEBUG = True
 # Paths
 PROJECT_DIR = Path(os.path.realpath(__name__)).parents[0] / "licksterr"
 UPLOAD_DIR = Path(PROJECT_DIR) / "uploads"
-TEMP_DIR = Path(PROJECT_DIR) / "temp"
+ASSETS_DIR = Path(PROJECT_DIR) / "assets"
+SHAPES_DIR = ASSETS_DIR / "shapes"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-TEMP_DIR.mkdir(exist_ok=True)
+ASSETS_DIR.mkdir(exist_ok=True)
+SHAPES_DIR.mkdir(exist_ok=True)
 
 # This db is already initiated with notes and forms (since they take almost 30s to compute)
 DB_USER = 'licksterr-test'

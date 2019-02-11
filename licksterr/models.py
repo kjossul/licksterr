@@ -201,6 +201,7 @@ class Form(db.Model):
     )
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.Integer, nullable=False)
+    key_name = db.Column(db.String())
     scale = db.Column(db.Enum(Scale), nullable=False)
     name = db.Column(db.String(), nullable=False)
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
@@ -218,19 +219,23 @@ class Form(db.Model):
         note_list = tuple(Note.get(string, fret) for string, fret in note_list)
         super().__init__(key=key, scale=scale, name=name, **kwargs)
         for note in note_list:
-            # assigns a different score to each note based on the role it plays in the form
+            # Calculates the relative degree of each note w.r.t. the form root
             tuning = kwargs.get('tuning', STANDARD_TUNING)
+            # todo rename degree to interval
             degree = ((tuning[note.string - 1] + note.fret) % 12 - key) % 12
             db.session.add(FormNote(form=self, note=note, degree=degree))
 
     def __str__(self):
-        return f"{self.key} {self.scale} {self.forms}"
+        return f"{self.key} {self.scale} {self.name}"
 
     def __hash__(self):
         return self.id
 
     def to_dict(self):
         return {'name': self.name, 'key': self.key, 'scale': self.scale.name}
+
+    def get_note_value(self, note):
+        return (self.tuning[note.string - 1] + note.fret) % 12
 
     @classmethod
     def get(cls, key, scale, name):
@@ -244,6 +249,7 @@ class Form(db.Model):
         Then progressively build the scale, go to the next string if the distance between the start and the note is
         greater than 3 frets (the pinkie would have to stretch and it's easier to get that note going down a string).
         If by the end not all the roots are included in the form, call the function again and start on an higher fret.
+        fixme this is not guaranteed to be correct (i think). I should check note for note in the scale instead
         """
         strings = (None,) + tuple(String(note) for note in STANDARD_TUNING)
         # Indexes of string for each root form
@@ -292,9 +298,8 @@ class Form(db.Model):
                     notes_list.append((i, fret))
         if not set(roots).issubset(set(notes_list)):
             return cls.calculate_caged_form(key, scale, form, form_start=form_start + 1, transpose=transpose)
-        key = notes.note_to_int(key)
         scale = getattr(Scale, scale.__name__.upper())
-        return cls(notes_list, key, scale, form, transpose=transpose)
+        return cls(notes_list, notes.note_to_int(key), scale, form, transpose=transpose, key_name=key)
 
 
 class Measure(db.Model):

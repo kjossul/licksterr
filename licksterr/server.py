@@ -11,7 +11,7 @@ navigator = Blueprint('navigator', __name__)
 @navigator.route('/', defaults={'req_path': ''})
 @navigator.route('/<path:req_path>')
 def home(req_path):
-    if req_path.startswith(str(current_app.config['UPLOAD_DIR'])[1:]):
+    if req_path.startswith(str(current_app.config['PROJECT_DIR'])[1:]):
         return get_file("/" + req_path)  # fixme platform independency (/ works only for unix?)
     songs = {song: song.to_dict() for song in Song.query.all()}
     return render_template('home.html', songs=songs), "HTTP/1.1 200 OK", {"Content-Type": "text/html"}

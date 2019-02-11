@@ -4,6 +4,10 @@ venv/
 *.sock
 playgrounds/
 
+# Generated files
+*.log
+tests/licksterr/
+
 # IDE stuff
 .idea/
 node_modules/
