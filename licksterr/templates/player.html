@@ -24,6 +24,7 @@
             });
             at.on('alphaTab.rendered', function () {
                 createNoteCircles({{ interval_list|tojson }});
+                findMeasures();
             });
         });
     </script>

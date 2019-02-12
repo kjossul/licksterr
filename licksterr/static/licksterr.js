@@ -61,6 +61,9 @@ function uploadFile(file, tracks) {
 }
 
 /* PLAYER */
+
+/* Note circles */
+
 function createNoteCircles(intervals) {
     getFretElements().each(function (i, text) {
         let x = text.x.baseVal[0].value;
@@ -92,5 +95,30 @@ function updateNoteColors(colors) {
         } else {
             classContainer.html(className + ' {display:none}');
         }
+    });
+}
+
+/* Form shape information */
+
+function findMeasures() {
+    $("svg").slice(1).each(function (i, svg) {
+        let start = null;
+        let xs = {};
+        let y = null;
+        $(svg).find("rect").each(function (j, rect) {
+            let x = rect.x.baseVal.value;
+            start = start ? start : x;
+            if (j > 6 && start === x) {
+                // We have examined all pentagram, no need to go on with the tab, because we already know measures
+                // positions and lengths. Exit loop and keep only the y offset of the tablature.
+                y = rect.y.baseVal.value;
+                return false;
+            }
+            let width = rect.width.baseVal.value;
+            if (width > 20) {
+                xs[x] = width;
+            }
+        });
+        console.log(xs, y);
     });
 }
