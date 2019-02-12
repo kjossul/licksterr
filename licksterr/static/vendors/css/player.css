@@ -82,3 +82,10 @@
 #content {
     margin-top: 20px;
 }
+
+/* NOTE CIRCLES */
+.note {
+    opacity: 0.4;
+    stroke: black;
+    stroke-width: 1;
+}

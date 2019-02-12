@@ -61,7 +61,7 @@ function uploadFile(file, tracks) {
 }
 
 /* PLAYER */
-function createNoteCircles(intervals, colors) {
+function createNoteCircles(intervals) {
     getFretElements().each(function (i, text) {
         let x = text.x.baseVal[0].value;
         let y = text.y.baseVal[0].value;
@@ -70,15 +70,10 @@ function createNoteCircles(intervals, colors) {
             cx: x + (text.innerHTML.length / 2 + 1) * 3,
             cy: y,
             r: 8,
-            opacity: 0.4,
-            stroke: "black",
-            "stroke-width": 1,
-            display: "none"
+            class: "note note-" + intervals[i].toString(),
         });
         $(text).after($circle);
     });
-    showNoteCircles(intervals, colors);
-    console.log($("svg").length);
 }
 
 function getFretElements() {
@@ -86,12 +81,16 @@ function getFretElements() {
     return texts;
 }
 
-function showNoteCircles(intervals, colors) {
-    $("circle").each(function (i, circle) {
-        if (colors[intervals[i]]) {
-            $(circle).css({display: "block", fill: colors[intervals[i]]});
+function updateNoteColors(colors) {
+    colors.forEach(function (color, i) {
+        className = ".note-" + i;
+        classContainer = $("head").find('style[data-class="' + className + '"]');
+        if (color) {
+            classContainer.html(className + ' {' +
+                'fill:' + color + '; display:block' +
+                '}');
         } else {
-            $(circle).css({display: "none"});
+            classContainer.html(className + ' {display:none}');
         }
     });
 }

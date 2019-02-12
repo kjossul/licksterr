@@ -22,6 +22,9 @@
                 tracks: [{{ track_index }}],
                 lazy: false
             });
+            at.on('alphaTab.rendered', function () {
+                createNoteCircles({{ interval_list|tojson }});
+            });
         });
     </script>
 {% endblock %}
@@ -37,6 +40,13 @@
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-slider/9.7.2/css/bootstrap-slider.min.css"
           integrity="sha256-6b+gYy3DG/roKdQiHqp1FJYFQkaZdM6ohUpGyFyUAGk=" crossorigin="anonymous">
+    {% for i in range(12) %}
+        <style type="text/css" data-class=".note-{{ i }}">
+            .note-{{ i }} {
+                display: none;
+            }
+        </style>
+    {% endfor %}
 {% endblock %}
 {% block content %}
     <!-- Top Navbar -->
@@ -96,7 +106,7 @@
                     <li class="dropdown">
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true"
                            aria-expanded="false" id="highlightOptions"
-                           onclick="createNoteCircles({{ interval_list|tojson }}, ['red'].concat(new Array(11).fill(null)))">
+                           onclick="updateNoteColors(['red'].concat(new Array(11).fill(null)))">
                             Highlight
                         </a>
                     </li>
