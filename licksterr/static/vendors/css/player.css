@@ -89,3 +89,9 @@
     stroke: black;
     stroke-width: 1;
 }
+
+.form-bar {
+    opacity: 0.4;
+    stroke: black;
+    stroke-width: 0;
+}

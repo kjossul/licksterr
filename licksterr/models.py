@@ -1,6 +1,6 @@
 import bisect
 import logging
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from enum import Enum
 from fractions import Fraction
 
@@ -176,9 +176,10 @@ class Track(db.Model):
         except ValueError:
             pass
 
-    def get_form_match(self):
+    def get_form_match(self, ks=None):
         match = []
-        for k in self.keys:
+        ks = ks if ks else self.keys
+        for k in ks:
             key, is_major = KEYS[k]
             key_result = {'key': notes.int_to_note(key), 'isMajor': is_major, 'forms': defaultdict(float)}
             for tf in TrackForm.get_forms(self):
@@ -226,7 +227,7 @@ class Form(db.Model):
             db.session.add(FormNote(form=self, note=note, degree=degree))
 
     def __str__(self):
-        return f"{self.key} {self.scale} {self.name}"
+        return f"{self.key_name} {self.scale}, form: {self.name}"
 
     def __hash__(self):
         return self.id
@@ -454,6 +455,18 @@ class TrackMeasure(db.Model):
     @classmethod
     def get_measures(cls, track):
         return cls.query.filter_by(track=track).all()
+
+    @classmethod
+    def get_measure_dictionary(cls, track, key=None, threshold=0.4):
+        # todo analize track with a new key if requested
+        info = defaultdict(lambda: defaultdict(lambda: int))  # {measure_index: {form: match}}
+        for tm in cls.query.filter_by(track=track):
+            for tf in TrackForm.query.filter_by(track=track):
+                fm = FormMeasure.query.get((tf.form.id, tm.measure.id))
+                if fm and fm.match > threshold:
+                    for index in tm.indexes:
+                        info[index][fm.form.id] = fm.match
+        return OrderedDict(sorted(info.items()))
 
 
 class FormMeasure(db.Model):

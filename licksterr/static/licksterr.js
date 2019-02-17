@@ -100,10 +100,11 @@ function updateNoteColors(colors) {
 
 /* Form shape information */
 
-function findMeasures() {
+function findMeasures(measureInfo, imgDir) {
     $("svg").slice(1).each(function (i, svg) {
         let start = null;
         let xs = {};
+        let highEStringRect = null;
         let y = null;
         $(svg).find("rect").each(function (j, rect) {
             let x = rect.x.baseVal.value;
@@ -111,6 +112,7 @@ function findMeasures() {
             if (j > 6 && start === x) {
                 // We have examined all pentagram, no need to go on with the tab, because we already know measures
                 // positions and lengths. Exit loop and keep only the y offset of the tablature.
+                highEStringRect = rect;
                 y = rect.y.baseVal.value;
                 return false;
             }
@@ -119,6 +121,44 @@ function findMeasures() {
                 xs[x] = width;
             }
         });
-        console.log(xs, y);
+        $.each(xs, function (x, width) {
+            if (!measureInfo[i]) {
+                // No measure was matched here, probably just a whole pause
+                drawRectangle(highEStringRect, x, y - 30, width, 10)
+            } else {
+                let j = 0;
+                let rectLen = width / (Object.keys(measureInfo[i]).length);
+                $.each(measureInfo[i], function (measureId, match) {
+                    drawRectangle(highEStringRect, x + j * rectLen, y - 30, rectLen, 10);
+                    let link = imgDir + "/" + measureId + '.svg';
+                    drawFormImage(highEStringRect, link, x + j * rectLen, y - 60);
+                    j += 1;
+                })
+            }
+        });
     });
+}
+
+function drawRectangle(nextElement, x, y, width, height) {
+    let rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    let $rect = $(rect).attr({
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        class: "form-bar form-bar-"
+    });
+    $(nextElement).before($rect);
+}
+
+function drawFormImage(nextElement, link, x, y) {
+    let img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+    let $img = $(img).attr({
+        x: x,
+        y: y,
+        width: 300,
+        height: 300,
+        href: link
+    });
+    $(nextElement).before($img);
 }
