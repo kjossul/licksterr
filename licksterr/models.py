@@ -1,10 +1,15 @@
+import base64
 import bisect
 import logging
+import os
 from collections import defaultdict, OrderedDict
 from enum import Enum
 from fractions import Fraction
+from tempfile import mkstemp
 
+from cairosvg import svg2png
 from flask_sqlalchemy import SQLAlchemy
+from fretboard import Fretboard
 from guitarpro import NoteType
 from mingus.core import notes, scales
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -143,7 +148,7 @@ class Track(db.Model):
         if key in self.keys:
             return
         self.keys.append(key)
-        form_matches = defaultdict(float)
+        form_measure_matches = defaultdict(float)
         scale_matches = defaultdict(float)
         total_length = 0
         key, is_major = KEYS[key]
@@ -154,16 +159,19 @@ class Track(db.Model):
                 form = fm.form
                 if form.tuning == self.tuning and form.key == key and form.scale in SCALES_TYPE[is_major]:
                     score = fm.match * len(tm.indexes)
-                    form_matches[form] += score
+                    form_measure_matches[fm] += score
                     scale_matches[form.scale] += score
         # In case of ties, the order specified in SCALES_TYPE is used as tiebraker (0.0001 should be small enough to not
         # alter significantly the results
         top_scale = max(scale_matches,
                         key=lambda scale: scale_matches[scale] - 10 ** (-3) * SCALES_TYPE[is_major].index(scale))
-        for form, match in form_matches.items():
-            if form.scale == top_scale:
-                tf = TrackForm(track=self, form=form, match=match / total_length)
-                db.session.add(tf)
+        for fm, match in form_measure_matches.items():
+            if fm.form.scale == top_scale:
+                tf = TrackForm.query.filter_by(track=self, form=fm.form).scalar()
+                if not tf:
+                    tf = TrackForm(track=self, form=fm.form, match=match / total_length)
+                    db.session.add(tf)
+                fm.create_png_fretboard()
 
     def remove_key(self, key):
         try:
@@ -306,7 +314,8 @@ class Form(db.Model):
 class Measure(db.Model):
     __tablename__ = 'measure'
 
-    id = db.Column(db.String(), primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
+    repr = db.Column(db.String(), nullable=False, unique=True)
     forms = association_proxy('measure_to_form', 'form')
     beats = association_proxy('measure_to_beat', 'beat')
 
@@ -323,10 +332,11 @@ class Measure(db.Model):
         Retrieves the measure with the given beats or creates a new one from them. Upon creation, known forms in the
         database are matched against the notes found in each beat and % of matching is calculated.
         """
-        id = ''.join(beat.id for beat in beats)
-        measure = Measure.query.get(id)
+        id_string = ''.join(beat.id for beat in beats)
+        measure = Measure.query.filter_by(repr=id_string).first()
         if not measure:
-            measure = Measure(id=id)
+            measure = Measure(repr=id_string)
+            db.session.add(measure)
             form_match = defaultdict(float)  # % of duration a form occupies in this measure
             total_duration = 0
             for i, beat in enumerate(beats):
@@ -346,7 +356,8 @@ class Measure(db.Model):
             for form in form_match:
                 form_match[form] /= total_duration
             for form, match in form_match.items():
-                db.session.add(FormMeasure(form=form, measure=measure, match=match))
+                fm = FormMeasure(form=form, measure=measure, match=match)
+                db.session.add(fm)
         return measure
 
 
@@ -406,6 +417,9 @@ class Note(db.Model):
     def to_dict(self):
         return row2dict(self)
 
+    def equals_string_and_pitch(self, other):
+        return self.string == other.string and abs(self.fret - other.fret) % 12 == 0
+
     @classmethod
     def get(cls, string, fret, muted=False):
         return cls.query.filter_by(string=string, fret=fret, muted=muted).first()
@@ -440,7 +454,7 @@ class TrackMeasure(db.Model):
     __tablename__ = 'track_measure'
 
     track_id = db.Column(db.Integer, db.ForeignKey('track.id', ondelete='cascade'), primary_key=True)
-    measure_id = db.Column(db.String(), db.ForeignKey('measure.id', ondelete='cascade'), primary_key=True)
+    measure_id = db.Column(db.Integer, db.ForeignKey('measure.id', ondelete='cascade'), primary_key=True)
     # % that this measure occupies in the track
     match = db.Column(db.Float(precision=FLOAT_PRECISION))
     indexes = db.Column(MutableList.as_mutable(ARRAY(db.INTEGER)))
@@ -459,13 +473,13 @@ class TrackMeasure(db.Model):
     @classmethod
     def get_measure_dictionary(cls, track, key=None, threshold=0.4):
         # todo analize track with a new key if requested
-        info = defaultdict(lambda: defaultdict(lambda: int))  # {measure_index: {form: match}}
+        info = defaultdict(lambda: defaultdict(lambda: bytes))  # {measure_index: {form_measure_id: PNG_BYTES}}
         for tm in cls.query.filter_by(track=track):
             for tf in TrackForm.query.filter_by(track=track):
                 fm = FormMeasure.query.get((tf.form.id, tm.measure.id))
                 if fm and fm.match > threshold:
                     for index in tm.indexes:
-                        info[index][fm.form.id] = fm.match
+                        info[index][repr(fm)] = fm.create_png_fretboard()
         return OrderedDict(sorted(info.items()))
 
 
@@ -473,7 +487,7 @@ class FormMeasure(db.Model):
     __tablename__ = 'form_measure'
 
     form_id = db.Column(db.Integer, db.ForeignKey('form.id'), primary_key=True)
-    measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
+    measure_id = db.Column(db.Integer, db.ForeignKey('measure.id'), primary_key=True)
     # % of match between this form and this measure
     match = db.Column(db.Float(precision=FLOAT_PRECISION), nullable=False)
 
@@ -481,7 +495,47 @@ class FormMeasure(db.Model):
     measure = db.relationship('Measure', backref=db.backref("measure_to_form", cascade='all, delete-orphan'))
 
     def __str__(self):
-        return f"Match (form: {self.form}, measure: {self.measure}): {self.match}"
+        return f"form: {self.form}, measure: {self.measure}"
+
+    def __repr__(self):
+        return f"{self.form_id}_{self.measure_id}"
+
+    def create_png_fretboard(self):
+        key = self.form.key_name
+        style = {"drawing": {"font_size": 12}}
+        measure_notes = set(note for beat in self.measure.beats for note in beat.notes)
+        scale = ENUM_DICT[self.form.scale](key)
+        scale_notes = scale.ascending()
+        fns = list(FormNote.query.filter_by(form=self.form))
+        start = min(fn.note.fret for fn in fns)
+        drawable = [fn for fn in fns if start <= fn.note.fret < start + 5]
+        # If this shape is "cut" near the neck show the full shape higher up the fretboard
+        if len(drawable) < len(fns) / 2:
+            drawable = [fn for fn in fns if fn not in drawable]
+            start = min(fn.note.fret for fn in drawable)
+        shape = Fretboard(frets=(start, start + 4), style=style)
+        for fn in drawable:
+            if start <= fn.note.fret < start + 5:
+                note_value = (self.form.key + fn.degree) % 12
+                note_name = next(note for note in scale_notes if notes.note_to_int(note) == note_value)
+                if any(note.equals_string_and_pitch(fn.note) for note in measure_notes):
+                    if fn.degree == 0:
+                        color = '#ff4d21'
+                    else:
+                        color = '#56a5ff'
+                else:
+                    if fn.degree == 0:
+                        color = '#fcb5a4'
+                    else:
+                        color = '#bfbfbf'
+                shape.add_marker(abs(fn.note.string - 6), fn.note.fret, label=note_name, color=color)
+        f, temp_filename = mkstemp()
+        shape.save(temp_filename)
+        with open(temp_filename, 'rb') as tf:
+            svg_data = tf.read()
+            png_bytes = svg2png(bytestring=svg_data)
+            os.remove(temp_filename)
+            return str(base64.b64encode(png_bytes))[2:-1]
 
     @classmethod
     def get_forms(cls, measure):
@@ -495,7 +549,7 @@ class FormMeasure(db.Model):
 class MeasureBeat(db.Model):
     __tablename__ = 'measure_beat'
 
-    measure_id = db.Column(db.String(), db.ForeignKey('measure.id'), primary_key=True)
+    measure_id = db.Column(db.Integer, db.ForeignKey('measure.id'), primary_key=True)
     beat_id = db.Column(db.String(39), db.ForeignKey('beat.id'), primary_key=True)
     indexes = db.Column(MutableList.as_mutable(ARRAY(db.INTEGER)))
 

@@ -134,15 +134,14 @@ function findMeasures(measureInfo, imgDir) {
                 let matchesLength = (Object.keys(measureInfo[measureId]).length);
                 let rectLen = width / matchesLength;
                 let imageX = Number(x) + width / 2 - FORM_SHAPE_WIDTH / 2;
-                $.each(measureInfo[measureId], function (formId, match) {
+                $.each(measureInfo[measureId], function (formMeasureId, pngBytes) {
                     let position = Number(x) + j * rectLen;
+                    let formId = formMeasureId.slice(0, formMeasureId.indexOf('_'));
                     if (!formIdMap[formId]) {
-                        console.log(formId);
                         formIdMap[formId] = Object.keys(formIdMap).length;
                     }
                     drawRectangle(highEStringRect, position, y - 30, rectLen, FORM_BAR_HEIGHT, "form-bar form-bar-" + formIdMap[formId], matchId);
-                    let link = imgDir + "/" + formId + '.svg';
-                    drawFormImage(highEStringRect, link, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
+                    drawFormImage(highEStringRect, pngBytes, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
                     j++;
                     matchId++;
                 })
@@ -174,7 +173,7 @@ function drawRectangle(nextElement, x, y, width, height, clsName, formId = null)
     }
 }
 
-function drawFormImage(nextElement, link, x, y, index) {
+function drawFormImage(nextElement, pngBytes, x, y, index) {
     let g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     g = $(g).attr({
         id: "form-img-" + index,
@@ -186,7 +185,7 @@ function drawFormImage(nextElement, link, x, y, index) {
         y: y,
         width: FORM_SHAPE_WIDTH,
         height: FORM_SHAPE_HEIGHT,
-        href: link,
+        href: "data:image/png;base64," + pngBytes,
         class: "form-image"
     });
     $(nextElement).before(g);
