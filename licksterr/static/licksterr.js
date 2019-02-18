@@ -100,7 +100,12 @@ function updateNoteColors(colors) {
 
 /* Form shape information */
 
+const FORM_SHAPE_WIDTH = 150;
+const FORM_SHAPE_HEIGHT = 175;
+
 function findMeasures(measureInfo, imgDir) {
+    let measureId = 0;
+    let matchId = 0;  // Used as a progressive number to show / hide form images popups
     $("svg").slice(1).each(function (i, svg) {
         let start = null;
         let xs = {};
@@ -122,43 +127,63 @@ function findMeasures(measureInfo, imgDir) {
             }
         });
         $.each(xs, function (x, width) {
-            if (!measureInfo[i]) {
+            if (!measureInfo[measureId]) {
                 // No measure was matched here, probably just a whole pause
-                drawRectangle(highEStringRect, x, y - 30, width, 10)
+                drawRectangle(highEStringRect, x, y - 30, width, 10, "form-bar form-bar-" + measureId)
             } else {
                 let j = 0;
-                let rectLen = width / (Object.keys(measureInfo[i]).length);
-                $.each(measureInfo[i], function (measureId, match) {
-                    drawRectangle(highEStringRect, x + j * rectLen, y - 30, rectLen, 10);
-                    let link = imgDir + "/" + measureId + '.svg';
-                    drawFormImage(highEStringRect, link, x + j * rectLen, y - 60);
-                    j += 1;
+                let matchesLength = (Object.keys(measureInfo[measureId]).length);
+                let rectLen = width / matchesLength;
+                let imageX = Number(x) + width / 2 - FORM_SHAPE_WIDTH / 2;
+                $.each(measureInfo[measureId], function (formId, match) {
+                    let position = Number(x) + j * rectLen;
+                    drawRectangle(highEStringRect, position, y - 30, rectLen, 10, "form-bar form-bar-" + measureId, matchId);
+                    let link = imgDir + "/" + formId + '.svg';
+                    drawFormImage(highEStringRect, link, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
+                    j++;
+                    matchId++;
                 })
             }
+            measureId++;
         });
     });
 }
 
-function drawRectangle(nextElement, x, y, width, height) {
+function drawRectangle(nextElement, x, y, width, height, clsName, formId = null) {
     let rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    let $rect = $(rect).attr({
+    rect = $(rect).attr({
         x: x,
         y: y,
         width: width,
         height: height,
-        class: "form-bar form-bar-"
+        class: clsName
     });
-    $(nextElement).before($rect);
+    $(nextElement).before(rect);
+    if (formId != null) {
+        $(rect).hover(function () {
+            $("#form-img-" + formId).removeAttr("display");
+        }, function () {
+            $("#form-img-" + formId).attr("display", "none");
+        });
+    }
 }
 
-function drawFormImage(nextElement, link, x, y) {
+function drawFormImage(nextElement, link, x, y, index) {
+    let g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g = $(g).attr({
+        id: "form-img-" + index,
+        display: "none"
+    });
     let img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    let $img = $(img).attr({
+    img = $(img).attr({
         x: x,
         y: y,
-        width: 300,
-        height: 300,
-        href: link
+        width: FORM_SHAPE_WIDTH,
+        height: FORM_SHAPE_HEIGHT,
+        href: link,
+        class: "form-image"
     });
-    $(nextElement).before($img);
+    $(nextElement).before(g);
+    $(g).append(img);
+    drawRectangle(img, x, y, FORM_SHAPE_WIDTH, FORM_SHAPE_HEIGHT, "form-img-border");
 }

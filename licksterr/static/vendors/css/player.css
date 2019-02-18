@@ -95,3 +95,9 @@
     stroke: black;
     stroke-width: 0;
 }
+
+.form-img-border {
+    fill: none;
+    stroke: black;
+    stroke-width: 2;
+}
