@@ -48,6 +48,14 @@
             }
         </style>
     {% endfor %}
+    {% set colors=["#5BC0EB", "#FDE74C", "#9BC53D", "#E55934", "#FA7921"] %}
+    {% for i in range(5) %}
+        <style type="text/css" data-class=".form-bar-{{ i }}">
+            .form-bar-{{ i }} {
+                fill: {{ colors[i] }};
+            }
+        </style>
+    {% endfor %}
 {% endblock %}
 {% block content %}
     <!-- Top Navbar -->

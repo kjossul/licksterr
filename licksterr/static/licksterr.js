@@ -100,12 +100,14 @@ function updateNoteColors(colors) {
 
 /* Form shape information */
 
+const FORM_BAR_HEIGHT = 12;
 const FORM_SHAPE_WIDTH = 150;
 const FORM_SHAPE_HEIGHT = 175;
 
 function findMeasures(measureInfo, imgDir) {
     let measureId = 0;
     let matchId = 0;  // Used as a progressive number to show / hide form images popups
+    let formIdMap = {};  // Maps each formId to an incremental index
     $("svg").slice(1).each(function (i, svg) {
         let start = null;
         let xs = {};
@@ -127,17 +129,18 @@ function findMeasures(measureInfo, imgDir) {
             }
         });
         $.each(xs, function (x, width) {
-            if (!measureInfo[measureId]) {
-                // No measure was matched here, probably just a whole pause
-                drawRectangle(highEStringRect, x, y - 30, width, 10, "form-bar form-bar-" + measureId)
-            } else {
+            if (measureInfo[measureId]) {
                 let j = 0;
                 let matchesLength = (Object.keys(measureInfo[measureId]).length);
                 let rectLen = width / matchesLength;
                 let imageX = Number(x) + width / 2 - FORM_SHAPE_WIDTH / 2;
                 $.each(measureInfo[measureId], function (formId, match) {
                     let position = Number(x) + j * rectLen;
-                    drawRectangle(highEStringRect, position, y - 30, rectLen, 10, "form-bar form-bar-" + measureId, matchId);
+                    if (!formIdMap[formId]) {
+                        console.log(formId);
+                        formIdMap[formId] = Object.keys(formIdMap).length;
+                    }
+                    drawRectangle(highEStringRect, position, y - 30, rectLen, FORM_BAR_HEIGHT, "form-bar form-bar-" + formIdMap[formId], matchId);
                     let link = imgDir + "/" + formId + '.svg';
                     drawFormImage(highEStringRect, link, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
                     j++;
@@ -162,8 +165,11 @@ function drawRectangle(nextElement, x, y, width, height, clsName, formId = null)
     if (formId != null) {
         $(rect).hover(function () {
             $("#form-img-" + formId).removeAttr("display");
+            $(rect).attr("style", "opacity: 0.8");
+
         }, function () {
             $("#form-img-" + formId).attr("display", "none");
+            $(rect).removeAttr("style");
         });
     }
 }

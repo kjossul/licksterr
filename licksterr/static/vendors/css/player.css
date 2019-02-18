@@ -91,9 +91,9 @@
 }
 
 .form-bar {
-    opacity: 0.4;
+    opacity: 0.5;
     stroke: black;
-    stroke-width: 0;
+    stroke-width: 1;
 }
 
 .form-img-border {
