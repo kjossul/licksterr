@@ -11,10 +11,10 @@ def create_notes_and_forms():
     logger.debug("Adding notes to database")
     db.session.add(Note(string=0, fret=0))  # "Pause" note
     for string in range(1, 7):
-        for fret in range(0, 30):
+        for fret in range(-1, 30):  # -1 encodes the muted note
             db.session.add(Note(string=string, fret=fret))
     db.session.commit()
-    logger.debug("Generating forms..")
+    logger.debug("Generating CAGED forms..")
     for key, scale in yield_scales():
         logger.debug(f"Generating {key} {scale}")
         for form_name in 'CAGED':

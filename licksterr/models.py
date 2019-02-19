@@ -135,7 +135,6 @@ class Track(db.Model):
     index = db.Column(db.Integer)  # Index of the track in the song
     tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)
     keys = db.Column(ARRAY(db.Integer))
-    intervals = db.Column(ARRAY(db.Integer))
 
     measures = association_proxy('track_to_measure', 'measure')
     forms = association_proxy('track_to_form', 'form')
@@ -148,6 +147,8 @@ class Track(db.Model):
         if key in self.keys:
             return
         self.keys.append(key)
+        if self.tuning != STANDARD_TUNING:
+            return
         form_measure_matches = defaultdict(float)
         scale_matches = defaultdict(float)
         total_length = 0
@@ -163,8 +164,12 @@ class Track(db.Model):
                     scale_matches[form.scale] += score
         # In case of ties, the order specified in SCALES_TYPE is used as tiebraker (0.0001 should be small enough to not
         # alter significantly the results
-        top_scale = max(scale_matches,
-                        key=lambda scale: scale_matches[scale] - 10 ** (-3) * SCALES_TYPE[is_major].index(scale))
+        try:
+            top_scale = max(scale_matches,
+                            key=lambda scale: scale_matches[scale] - 10 ** (-3) * SCALES_TYPE[is_major].index(scale))
+        except ValueError:
+            logger.debug(f"No scale match found for current track")
+            return
         for fm, match in form_measure_matches.items():
             if fm.form.scale == top_scale:
                 tf = TrackForm.query.filter_by(track=self, form=fm.form).scalar()
@@ -366,7 +371,7 @@ class Measure(db.Model):
 class Beat(db.Model):
     __tablename__ = 'beat'
 
-    id = db.Column(db.String(39), primary_key=True)  # 39 max length (6 notes * 6 ('SxFyyP') + 3 ('Dzz')
+    id = db.Column(db.String(33), primary_key=True)  # 39 max length (6 notes * 5 ('SxFyy') + 3 ('Dzz'))
     duration = db.Column(db.Integer, nullable=False)  # duration of the note(s) (1 - whole, 2 - half, ...)
     notes = association_proxy('beat_to_note', 'note')
 
@@ -390,7 +395,7 @@ class Beat(db.Model):
                         logger.debug(
                             f"Found tie to non existing note at measure {beat.voice.measure.number} (skipping)")
                 else:
-                    ns.append((Note.get(note.string, note.value), False))
+                    ns.append((Note.get(note.string, note.value, muted=note.type == NoteType.dead), False))
         id = ''.join(repr(note) for note, _ in ns) + f'D{beat.duration.value:02}'
         b = Beat.query.get(id)
         if not b:
@@ -404,17 +409,16 @@ class Beat(db.Model):
 class Note(db.Model):
     __tablename__ = 'note'
     __table_args__ = (
-        db.UniqueConstraint('string', 'fret', 'muted'),
+        db.UniqueConstraint('string', 'fret'),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     string = db.Column(db.Integer, nullable=False)
     fret = db.Column(db.Integer, nullable=False)
-    muted = db.Column(db.Boolean, nullable=False, default=False)
     forms = association_proxy('note_to_form', 'form')
 
     def __repr__(self):
-        return f"S{self.string}F{self.fret:02}" + ('M' if self.muted else 'P')
+        return f"S{self.string}F{self.fret:02}"
 
     def to_dict(self):
         return row2dict(self)
@@ -424,7 +428,8 @@ class Note(db.Model):
 
     @classmethod
     def get(cls, string, fret, muted=False):
-        return cls.query.filter_by(string=string, fret=fret, muted=muted).first()
+        fret = fret if not muted else -1  # -1 encodes the muted note (X)
+        return cls.query.filter_by(string=string, fret=fret).first()
 
 
 # Associations

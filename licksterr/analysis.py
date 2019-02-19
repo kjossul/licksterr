@@ -59,7 +59,6 @@ def parse_track(song, track, index):
     note_durations = [0] * 12
     segment_duration = 0
     prev_beat = None  # used to correctly store tied note information
-    note_values = []
     for i, m in enumerate(track.measures):
         beats = []
         for b in m.voices[0].beats:  # fixme handle multiple voices
@@ -69,14 +68,9 @@ def parse_track(song, track, index):
             # k-s analysis
             beat_duration = Fraction(1 / beat.duration)
             for note in b.notes:
-                if note.string > 0:  # if it's not a pause beat
+                if note.string > 0 and note.type != NoteType.dead:  # if it's not a pause beat
                     note_value = (tuning[note.string - 1] + note.value) % 12
                     note_durations[note_value] += beat_duration
-                    if not note.type == NoteType.tie:
-                        if note.effect.grace:
-                            grace_value = (tuning[note.string - 1] + note.effect.grace.fret) % 12
-                            note_values.append(grace_value)
-                        note_values.append(note_value)
             # Does not increment segment duration if we had just pauses since now
             if any(duration for duration in note_durations):
                 segment_duration += beat_duration
@@ -92,8 +86,7 @@ def parse_track(song, track, index):
     # Updates database objects
     # Calculates matches of track against form given the keys
     results = finder.get_results()
-    intv = [(v - results[0]) % 12 for v in note_values]
-    track = Track(song_id=song.id, tuning=tuning, keys=[], index=index, intervals=intv)
+    track = Track(song_id=song.id, tuning=tuning, keys=[], index=index)
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
