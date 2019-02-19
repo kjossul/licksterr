@@ -20,11 +20,14 @@ song = Blueprint('song', __name__)
 def upload_file(file, temp_file):
     tracks = request.values.get('tracks', None)
     tracks = json.loads(tracks) if tracks else None
+    title = request.values.get('title')
+    artist = request.values.get('artist')
     try:
         content = temp_file.read()
         temp_file.seek(0)
         h = str(hashlib.sha256(content).digest()[:16])
-        s = parse_song(temp_file, tracks=[int(track) for track in tracks], extension=file.filename[-3:], hash=h)
+        s = parse_song(temp_file, tracks=[int(track) for track in tracks], extension=file.filename[-3:], hash=h,
+                       title=title, artist=artist)
         with open(str(current_app.config['UPLOAD_DIR'] / (str(s.id))), mode="wb") as f:
             f.write(content)
     except BadTabException:
@@ -40,7 +43,9 @@ def get_tab_info(file, temp_file):
         song = gp.parse(temp_file)
     except struct.error:
         abort(400)
-    return jsonify({i: track.name for i, track in enumerate(song.tracks) if len(track.strings) == 6})
+    info_dict = {'tracks': {i: track.name for i, track in enumerate(song.tracks) if len(track.strings) == 6},
+                 'title': song.title, 'artist': song.artist}
+    return jsonify(info_dict)
 
 
 @song.route('/songs/<song_id>', methods=['GET'])
@@ -49,6 +54,14 @@ def get_song(song_id):
     if not song:
         abort(404)
     return jsonify(song.to_dict())
+
+
+@song.route('/tracks/<track_id>', methods=['GET'])
+def get_track(track_id):
+    track = Track.query.get(track_id)
+    if not track:
+        abort(404)
+    return jsonify(track.to_dict())
 
 
 @song.route('/tracks/<track_id>/keys/<key_id>', methods=['PUT'])
@@ -75,14 +88,6 @@ def remove_song(song_id):
     logger.debug("Removed file on disk.")
     db.session.commit()
     return OK
-
-
-@song.route('/tracks/<track_id>', methods=['GET'])
-def get_track(track_id):
-    track = Track.query.get(track_id)
-    if not track:
-        abort(404)
-    return jsonify(track.to_dict())
 
 
 @song.route('/measures/<measure_id>', methods=['GET'])

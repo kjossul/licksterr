@@ -12,21 +12,21 @@
 {% block content %}
     <h1>Upload file</h1>
     <div id="uploadDiv">
-        <input type="file" name="file" id="uploadFile"/>
+        <input type="file" name="file" id="uploadTab"/>
         <button type="button" id="uploadBtn">Upload</button>
         <span id="uploadPlaceholder"></span>
     </div>
     <div id="trackSelect"></div>
+    <div id="songInfo" style="display: none">
+        <label for="songTitle">Title: </label><input type="text" id="songTitle"/>
+        <label for="songArtist">Artist: </label><input type="text" id="songArtist"/>
+    </div>
     <h1>Analyzed songs</h1>
     <ul class="decimal">
         {% for song, d in songs.items() %}
-            <li>{{ song|e }}
+            <li>
+                <a href="player?song={{ song.id }}">{{ song|e }}</a>
                 <button value="{{ song.id }}" class="remove-song-button">Remove song</button>
-                <ul class="circle">
-                    {% for track in d["tracks"] %}
-                        <li><a href="/player?track={{ track }}">track #{{ loop.index }}</a></li>
-                    {% endfor %}
-                </ul>
             </li>
         {% endfor %}
     </ul>

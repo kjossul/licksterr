@@ -16,14 +16,8 @@ from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
 
-PROJECT_ROOT = Path(os.path.realpath(__file__)).parents[1]
-ASSETS_DIR = PROJECT_ROOT / "assets"
-ANALYSIS_FOLDER = os.path.join(ASSETS_DIR, "analysis")
 
-KS_SECONDS = 1.5  # amount of seconds used to split segments in krumhansl-schmuckler alg
-
-
-def parse_song(file, tracks=None, extension="", hash=""):
+def parse_song(file, tracks=None, extension="", hash="", title="", artist=""):
     try:
         file.seek(0)
         song = gp.parse(file)
@@ -31,9 +25,9 @@ def parse_song(file, tracks=None, extension="", hash=""):
         raise BadTabException("Cannot open tab file.")
     data = {
         "album": song.album,
-        "artist": song.artist,
+        "artist": artist if artist else song.artist,
         "tempo": song.tempo,
-        "title": song.title,
+        "title": title if title else song.title,
         "year": song.copyright if song.copyright else None,
         "extension": extension,
         "hash": hash

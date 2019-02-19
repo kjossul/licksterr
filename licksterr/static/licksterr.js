@@ -10,8 +10,8 @@ function addUploadListener() {
                 tracks.push(obj.value);
             }
         });
-        const file = document.getElementById("uploadFile").files[0];
-        uploadFile(file, tracks);
+        const file = $("#uploadTab")[0].files[0];
+        uploadTab(file, tracks, $('#songTitle').val(), $('#songArtist').val());
         $('#uploadPlaceholder').innerText = "Waiting for server..."
     });
 }
@@ -31,10 +31,12 @@ function addRemoveListener() {
     });
 }
 
-function uploadFile(file, tracks) {
+function uploadTab(file, tracks, title, artist) {
     var fd = new FormData();
     fd.append("tab", file);
     fd.append("tracks", JSON.stringify(tracks));
+    fd.append("title", title);
+    fd.append("artist", artist);
     let is_analysis = tracks.length > 0;
     $.ajax({
         url: (is_analysis) ? "/upload" : "/tabinfo",
@@ -47,11 +49,18 @@ function uploadFile(file, tracks) {
                 window.location.reload();
             } else {
                 var $container = $('#trackSelect');
-                for (let [key, value] of Object.entries(response)) {
-                    $container.append($('<label />').html(value)
-                        .prepend($('<input/>').attr({type: 'checkbox', value: key, class: 'track-checkbox'})));
+                $container.empty();
+                for (let [key, value] of Object.entries(response['tracks'])) {
+                    $container
+                        .append($('<label />').html(value))
+                        .append($('<input/>').attr({type: 'checkbox', value: key, class: 'track-checkbox'}))
+                        .append('<br />');
                 }
                 $('#uploadPlaceholder').innerText = '';
+                $('#songInfo').show();
+                $('#songTitle').val(response['title']);
+                $('#songArtist').val(response['artist']);
+
             }
         },
         error: function (jqXHR, textStatus, errorMessage) {
@@ -62,6 +71,37 @@ function uploadFile(file, tracks) {
 
 /* PLAYER */
 
+/* track information */
+
+function editTrackInformation(tracks) {
+    $('.btn-group').each(function (i, div) {
+        let btn = $('<btn>').attr({
+            class: "btn btn-default",
+            type: "btn"
+        });
+        if (tracks[i]) {
+            // TODO request analysis with a particular key here
+            btn.text("Show Analysis");
+            btn.click(function () {
+                $.ajax({
+                    url: 'tracks/' + tracks[i],
+                    type: 'get',
+                    success: function (response) {
+                        createNoteCircles(response["intervals"]);
+                        findMeasures(response["measureInfo"]);
+                        btn.text("Show Analysis")
+                    }
+                });
+                btn.text("Processing..");
+            });
+        } else {
+            btn.text("Request Analysis")
+            // todo request analysis to server
+        }
+        $(div).append(btn);
+    });
+}
+
 /* Note circles */
 
 function createNoteCircles(intervals) {
@@ -69,11 +109,12 @@ function createNoteCircles(intervals) {
         let x = text.x.baseVal[0].value;
         let y = text.y.baseVal[0].value;
         let circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        console.log(text, intervals[i]);
         let $circle = $(circle).attr({
             cx: x + (text.innerHTML.length / 2 + 1) * 3,
             cy: y,
             r: 8,
-            class: "note note-" + intervals[i].toString(),
+            class: "note note-" + (intervals[i] ? intervals[i].toString() : 'x') ,
         });
         $(text).after($circle);
     });
@@ -104,7 +145,7 @@ const FORM_BAR_HEIGHT = 12;
 const FORM_SHAPE_WIDTH = 150;
 const FORM_SHAPE_HEIGHT = 175;
 
-function findMeasures(measureInfo, imgDir) {
+function findMeasures(measureInfo) {
     let measureId = 0;
     let matchId = 0;  // Used as a progressive number to show / hide form images popups
     let formIdMap = {};  // Maps each formId to an incremental index

@@ -19,12 +19,11 @@
             var at = $('#alphaTab');
             at.alphaTab({
                 file: '{{ filename }}',
-                tracks: [{{ track_index }}],
                 lazy: false
             });
+            // TODO get this in an AJAX reqest instead
             at.on('alphaTab.rendered', function () {
-                createNoteCircles({{ interval_list|tojson }});
-                findMeasures({{ measure_info|tojson }}, "{{ img_dir }}");
+                editTrackInformation({{ analyzed_tracks|tojson }});
             });
         });
     </script>
@@ -124,8 +123,7 @@
         </div>
     </nav>
     <div id="content">
-        <div id="alphaTab" data-file="{{ filename }}" data-tracks="{{ track_index }}"
-             data-player="{{ url_for('static', filename="vendors/js/alphaTab/default.sf2") }}"
+        <div id="alphaTab" data-file="{{ filename }}" data-player="{{ url_for('static', filename="vendors/js/alphaTab/default.sf2") }}"
              data-player-offset="[-10,-70]" class="alphaTab" style="position: relative; text-align: left;">
         </div>
     </div>

@@ -197,9 +197,11 @@ class Track(db.Model):
             match.append(key_result)
         return match
 
-    def to_dict(self):
+    def to_dict(self, key=None):
+        key = key if not key else self.keys[0]
         info = row2dict(self)
         info['match'] = self.get_form_match()
+        info["measureInfo"] = TrackMeasure.get_measure_info(self, key=key)
         return info
 
 
@@ -471,13 +473,13 @@ class TrackMeasure(db.Model):
         return cls.query.filter_by(track=track).all()
 
     @classmethod
-    def get_measure_dictionary(cls, track, key=None, threshold=0.4):
+    def get_measure_info(cls, track, key=None, threshold=0.4):
         # todo analize track with a new key if requested
         info = defaultdict(lambda: defaultdict(lambda: bytes))  # {measure_index: {form_measure_id: PNG_BYTES}}
         for tm in cls.query.filter_by(track=track):
             for tf in TrackForm.query.filter_by(track=track):
                 fm = FormMeasure.query.get((tf.form.id, tm.measure.id))
-                if fm and fm.match > threshold:
+                if fm and fm.match > threshold and fm.form.key == key:
                     for index in tm.indexes:
                         info[index][repr(fm)] = fm.create_png_fretboard()
         return OrderedDict(sorted(info.items()))
