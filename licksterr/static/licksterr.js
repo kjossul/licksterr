@@ -74,35 +74,47 @@ function uploadTab(file, tracks, title, artist) {
 /* track information */
 
 function editTrackInformation(tracks) {
-    $('.btn-group').each(function (i, div) {
-        if ($(div).children().length > 2) {
-            return false;
-        }
-        let btn = $('<btn>').attr({
-            class: "btn btn-default",
-            type: "btn"
+    $('.title').each(function (i, div) {
+        if (tracks[i])
+            $(div).append('<span>★</span>');
+        $(div).click(function () {
+            $("#alphaTab").on("alphaTab.rendered", function () {
+                if (tracks[i]) {
+                    initSongInfoContainer("Contacting server..");
+                    // todo remove click listener on track element otherwise things get messy
+                    $.ajax({
+                        url: 'tracks/' + tracks[i],
+                        type: 'get',
+                        success: function (response) {
+                            let d = response['match'][0];
+                            let text = "Key of " + d['key'] + " " + (d['isMajor'] ? 'major' : 'minor') + " (" + d["scale"].toLowerCase() + " mode)";
+                            initSongInfoContainer(text);
+                            findMeasures(response["measureInfo"], response["tuning"], response['key']);
+                        }
+                    });
+                } else {
+                    initSongInfoContainer("Choose a ★ track for analysis.");
+                }
+            })
         });
-        if (tracks[i]) {
-            // TODO request analysis with a particular key here
-            btn.text("Show Analysis");
-            btn.click(function () {
-                $.ajax({
-                    url: 'tracks/' + tracks[i],
-                    type: 'get',
-                    success: function (response) {
-                        let ys = findMeasures(response["measureInfo"], response["tuning"], response['key']);
-                        console.log(ys);
-                        btn.text("Show Analysis")
-                    }
-                });
-                btn.text("Processing..");
-            });
-        } else {
-            btn.text("Request Analysis")
-            // todo request analysis to server
-        }
-        $(div).append(btn);
     });
+}
+
+function initSongInfoContainer(innerText) {
+    let header = $("svg")[0];
+    let $trackInfo = $('#trackInfo');
+    if (!$trackInfo.length) {
+        $trackInfo = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        $($trackInfo).attr({
+            id: 'trackInfo',
+            y: header.height.baseVal.value - 60,
+            x: header.width.baseVal.value - 260,
+            style: "stroke: none; font:15px 'Georgia'",
+            dominantBaseline: 'hanging'
+        });
+        header.append($trackInfo);
+    }
+    $($trackInfo).html(innerText);
 }
 
 /* Note circles */
@@ -114,7 +126,7 @@ function createNoteCircles(texts, highEHeight, tuning, key) {
         let circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         let string = (y - highEHeight) / 11;
         let fret = $(text).html().replace(/[^0-9]+/g, '');
-        let interval = fret ? ((tuning[string] + Number(fret)) % 12 - key) % 12 : -1;
+        let interval = fret ? Math.abs(((tuning[string] + Number(fret)) % 12 - key)) % 12 : -1;
         let $circle = $(circle).attr({
             cx: x + (text.innerHTML.length / 2 + 1) * 3,
             cy: y,
@@ -184,7 +196,7 @@ function findMeasures(measureInfo, tuning, key) {
                         formIdMap[formId] = Object.keys(formIdMap).length;
                     }
                     drawRectangle(highEStringRect, position, y - 30, rectLen, FORM_BAR_HEIGHT, "form-bar form-bar-" + formIdMap[formId], matchId);
-                    drawFormImage(highEStringRect, pngBytes, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
+                    let img = drawFormImage(highEStringRect, pngBytes, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
                     j++;
                     matchId++;
                 })
@@ -214,6 +226,7 @@ function drawRectangle(nextElement, x, y, width, height, clsName, formId = null)
             $(rect).removeAttr("style");
         });
     }
+    return rect;
 }
 
 function drawFormImage(nextElement, pngBytes, x, y, index) {
@@ -234,4 +247,5 @@ function drawFormImage(nextElement, pngBytes, x, y, index) {
     $(nextElement).before(g);
     $(g).append(img);
     drawRectangle(img, x, y, FORM_SHAPE_WIDTH, FORM_SHAPE_HEIGHT, "form-img-border");
+    return g;
 }

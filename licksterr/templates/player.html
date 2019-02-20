@@ -21,9 +21,9 @@
                 file: '{{ filename }}',
                 lazy: false
             });
-            // TODO get this in an AJAX reqest instead
-            at.on('alphaTab.rendered', function () {
+            at.on('alphaTab.playerReady', function () {
                 editTrackInformation({{ analyzed_tracks|tojson }});
+                initSongInfoContainer("Choose a ★ track for analysis.");
             });
         });
     </script>
@@ -40,7 +40,7 @@
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-slider/9.7.2/css/bootstrap-slider.min.css"
           integrity="sha256-6b+gYy3DG/roKdQiHqp1FJYFQkaZdM6ohUpGyFyUAGk=" crossorigin="anonymous">
-    {% for i in range(12) %}
+    {% for i in range(-1, 12) %}
         <style type="text/css" data-class=".note-{{ i }}">
             .note-{{ i }} {
                 display: none;
