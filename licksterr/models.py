@@ -207,6 +207,7 @@ class Track(db.Model):
         info = row2dict(self)
         info['match'] = self.get_form_match()
         info["measureInfo"] = TrackMeasure.get_measure_info(self, key=key)
+        info['key'] = key
         return info
 
 

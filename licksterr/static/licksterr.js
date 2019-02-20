@@ -75,6 +75,9 @@ function uploadTab(file, tracks, title, artist) {
 
 function editTrackInformation(tracks) {
     $('.btn-group').each(function (i, div) {
+        if ($(div).children().length > 2) {
+            return false;
+        }
         let btn = $('<btn>').attr({
             class: "btn btn-default",
             type: "btn"
@@ -87,8 +90,8 @@ function editTrackInformation(tracks) {
                     url: 'tracks/' + tracks[i],
                     type: 'get',
                     success: function (response) {
-                        createNoteCircles(response["intervals"]);
-                        findMeasures(response["measureInfo"]);
+                        let ys = findMeasures(response["measureInfo"], response["tuning"], response['key']);
+                        console.log(ys);
                         btn.text("Show Analysis")
                     }
                 });
@@ -104,25 +107,22 @@ function editTrackInformation(tracks) {
 
 /* Note circles */
 
-function createNoteCircles(intervals) {
-    getFretElements().each(function (i, text) {
+function createNoteCircles(texts, highEHeight, tuning, key) {
+    texts.each(function (i, text) {
         let x = text.x.baseVal[0].value;
         let y = text.y.baseVal[0].value;
         let circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        console.log(text, intervals[i]);
+        let string = (y - highEHeight) / 11;
+        let fret = $(text).html().replace(/[^0-9]+/g, '');
+        let interval = fret ? ((tuning[string] + Number(fret)) % 12 - key) % 12 : -1;
         let $circle = $(circle).attr({
             cx: x + (text.innerHTML.length / 2 + 1) * 3,
             cy: y,
             r: 8,
-            class: "note note-" + (intervals[i] ? intervals[i].toString() : 'x') ,
+            class: "note note-" + interval,
         });
         $(text).after($circle);
     });
-}
-
-function getFretElements() {
-    texts = $("text[dominant-baseline='middle']");
-    return texts;
 }
 
 function updateNoteColors(colors) {
@@ -145,7 +145,7 @@ const FORM_BAR_HEIGHT = 12;
 const FORM_SHAPE_WIDTH = 150;
 const FORM_SHAPE_HEIGHT = 175;
 
-function findMeasures(measureInfo) {
+function findMeasures(measureInfo, tuning, key) {
     let measureId = 0;
     let matchId = 0;  // Used as a progressive number to show / hide form images popups
     let formIdMap = {};  // Maps each formId to an incremental index
@@ -162,6 +162,8 @@ function findMeasures(measureInfo) {
                 // positions and lengths. Exit loop and keep only the y offset of the tablature.
                 highEStringRect = rect;
                 y = rect.y.baseVal.value;
+                let texts = $(svg).find("text[dominant-baseline='middle']");
+                createNoteCircles(texts, y, tuning, key);
                 return false;
             }
             let width = rect.width.baseVal.value;
