@@ -112,11 +112,20 @@ class Tuning(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String())
     value = db.Column(db.ARRAY(db.Integer))
+
     scales = db.relationship('Scale')
+    tracks = db.relationship('Track')
+
 
     def __str__(self):
         return f"{self.name} - {self.value}"
 
+    def __getitem__(self, item):
+        return self.value[item]
+
+    @classmethod
+    def get_by_value(cls, tuning):
+        return cls.query.filter_by(value=tuning).first()
 
 class Scale(db.Model):
     """
@@ -140,7 +149,8 @@ class Scale(db.Model):
         super().__init__(name=SCALES_DICT[scale], tuning_id=tuning.id, intervals=intervals, **kwargs)
 
     def get_notes(self, key=0):
-        return (note for note in Note.get_all_notes() if note.get_int_value(self.tuning, key) in self.intervals)
+        tuning = Tuning.query.get(self.tuning_id)
+        return (note for note in Note.get_all_notes() if note.get_int_value(tuning, key) in self.intervals)
 
 
 class Chord(db.Model):
@@ -155,7 +165,7 @@ class Song(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     hash = db.Column(db.String(128), unique=True)
-    key = db.Column(db.Integer, nullable=False)
+    key = db.Column(db.Integer)
     album = db.Column(db.String())
     artist = db.Column(db.String())
     title = db.Column(db.String())
@@ -177,9 +187,9 @@ class Track(db.Model):
     __tablename__ = 'track'
 
     id = db.Column(db.Integer, primary_key=True)
-    song_id = db.Column(db.Integer, db.ForeignKey('song.id', ondelete='CASCADE'))
+    song_id = db.Column(db.Integer, db.ForeignKey('song.id', ondelete='CASCADE'), nullable=False)
+    tuning_id = db.Column(db.Integer, db.ForeignKey('tuning.id', ondelete='CASCADE'), nullable=False)
     index = db.Column(db.Integer)  # Index of the track in the song
-    tuning = db.Column(ARRAY(db.Integer), nullable=False, default=STANDARD_TUNING)  # todo move to relationship
     keys = db.Column(ARRAY(db.Integer))
 
     scales = association_proxy('track_to_scale', 'scale')
@@ -203,11 +213,11 @@ class Track(db.Model):
         key_value = key % 12
         for scale in SCALES_TYPE[is_major]:
             match = 0
-            s = Scale.query.filter_by(tuning=self.tuning, name=scale)
+            s = Scale.query.filter_by(tuning_id=self.tuning_id, name=scale).first()
             for note in s.get_notes(key_value):
                 tn = TrackNote.query.get((self.id, note.id))
                 match += tn.match if tn else 0
-            st = ScaleTrack(scale=scale, track=self, key=key_value, match=match)
+            st = ScaleTrack(scale=s, track=self, key=key_value, match=match)
             db.session.add(st)
 
 

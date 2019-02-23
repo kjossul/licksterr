@@ -18,7 +18,6 @@ class LicksterrTest(LiveServerTestCase):
 
     def tearDown(self):
         db.session.remove()
-        # keeps scales and notes created at startup
         for table in db.metadata.tables:
             db.engine.execute(text('DROP TABLE %s CASCADE' % table))
 

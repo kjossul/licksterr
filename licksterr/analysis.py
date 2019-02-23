@@ -9,7 +9,7 @@ from mingus.core import notes
 
 from licksterr.exceptions import BadTabException
 from licksterr.key_finder import KeyFinderAggregator
-from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, TrackNote
+from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, TrackNote, Tuning
 from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
@@ -35,12 +35,12 @@ def parse_song(file, tracks=None, extension="", hash="", title="", artist=""):
         logger.debug(f"Song with the same hash already found.")
         return s
     s = Song(**data)
+    db.session.add(s)
     logger.info(f"Parsing song {s}")
     for i, track in enumerate(song.tracks):
         if not tracks or i in tracks:
             t = parse_track(s, track, i)
             s.tracks.append(t)
-    db.session.add(s)
     db.session.commit()
     return s
 
@@ -51,7 +51,7 @@ def parse_track(song, track, index):
     Iterates the track beat by beat and checks for matches
     """
     logger.info(f"Parsing track {track.name}")
-    tuning = [notes.note_to_int(str(string)[0]) for string in track.strings]
+    tuning = Tuning.get_by_value([notes.note_to_int(str(string)[0]) for string in track.strings])
     measure_match = defaultdict(list)  # measure: list of indexes the measure occupies in the track
     finder = KeyFinderAggregator()
     total_duration = 0
@@ -69,7 +69,6 @@ def parse_track(song, track, index):
             total_duration += beat_duration
             for note in b.notes:
                 if note.string > 0 and note.type != NoteType.dead:  # if it's not a pause beat
-                    logger.info((tuning, note.string))
                     note_value = (tuning[note.string - 1] + note.value) % 12
                     measure_note_durations[note_value] += beat_duration
             # Does not increment segment duration if we had just pauses since now
@@ -87,7 +86,7 @@ def parse_track(song, track, index):
     # Updates database objects
     # Calculates matches of track against form given the keys
     results = finder.get_results()
-    track = Track(song_id=song.id, tuning=tuning, keys=[], index=index)
+    track = Track(song_id=song.id, tuning_id=tuning.id, keys=[], index=index)
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
