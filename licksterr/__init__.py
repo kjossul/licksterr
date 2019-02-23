@@ -6,8 +6,8 @@ from pathlib import Path
 
 from flask import Flask
 
-from licksterr.fretboard import create_notes_and_forms
-from licksterr.models import db, Form, Note
+from licksterr.fretboard import init_fretboard_elements
+from licksterr.models import db, Note
 from licksterr.server import navigator
 from licksterr.song import song
 
@@ -58,4 +58,4 @@ def create_app(config=None):
 
 def init_db():
     if not len(Note.query.all()):
-        create_notes_and_forms()
+        init_fretboard_elements()

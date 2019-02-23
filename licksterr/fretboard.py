@@ -1,34 +1,22 @@
 import logging
 
-from mingus.core import keys
-
-from licksterr.models import SCALES_DICT, Form, db, Note
+from licksterr.models import SCALES_DICT, db, Note, Tuning, STANDARD_TUNING, Scale
 
 logger = logging.getLogger(__name__)
 
 
-def create_notes_and_forms():
-    logger.debug("Adding notes to database")
-    db.session.add(Note(string=0, fret=0))  # "Pause" note
-    for string in range(1, 7):
+def init_fretboard_elements():
+    db.session.add(Note(string=-1, fret=0))  # "Pause" note
+    for string in range(0, 6):
         for fret in range(-1, 30):  # -1 encodes the muted note
             db.session.add(Note(string=string, fret=fret))
+    logger.debug("Added notes to database.")
+    standard_tuning = Tuning(name="Standard", value=STANDARD_TUNING)
+    db.session.add(standard_tuning)
     db.session.commit()
-    logger.debug("Generating CAGED forms..")
-    for key, scale in yield_scales():
-        logger.debug(f"Generating {key} {scale}")
-        for form_name in 'CAGED':
-            form = Form.calculate_caged_form(key, scale, form_name, transpose=True)
-            db.session.add(form)
+    logger.debug("Added standard tuning to database.")
+    for scale in SCALES_DICT.keys():
+        db.session.add(Scale(scale, standard_tuning))
+    logger.debug("Added scales to database.")
     db.session.commit()
     logger.info("Database initialization completed.")
-
-
-def yield_scales(scales_list=SCALES_DICT.keys(), keys_list=None):
-    for scale in scales_list:
-        current_keys = keys_list
-        if not current_keys:
-            current_keys = keys.minor_keys if scale.type == 'minor' else keys.major_keys
-        for key in current_keys[2:-1]:
-            yield key, scale
-

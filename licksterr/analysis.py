@@ -1,9 +1,7 @@
 import logging
-import os
 import struct
 from collections import defaultdict
 from fractions import Fraction
-from pathlib import Path
 
 import guitarpro as gp
 from guitarpro import NoteType
@@ -11,7 +9,7 @@ from mingus.core import notes
 
 from licksterr.exceptions import BadTabException
 from licksterr.key_finder import KeyFinderAggregator
-from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure
+from licksterr.models import db, Song, Beat, Measure, Track, TrackMeasure, TrackNote
 from licksterr.util import timing
 
 logger = logging.getLogger(__name__)
@@ -56,7 +54,8 @@ def parse_track(song, track, index):
     tuning = [notes.note_to_int(str(string)[0]) for string in track.strings]
     measure_match = defaultdict(list)  # measure: list of indexes the measure occupies in the track
     finder = KeyFinderAggregator()
-    note_durations = [0] * 12
+    total_duration = 0
+    measure_note_durations = [0] * 12
     segment_duration = 0
     prev_beat = None  # used to correctly store tied note information
     for i, m in enumerate(track.measures):
@@ -67,12 +66,14 @@ def parse_track(song, track, index):
             prev_beat = beat
             # k-s analysis
             beat_duration = Fraction(1 / beat.duration)
+            total_duration += beat_duration
             for note in b.notes:
                 if note.string > 0 and note.type != NoteType.dead:  # if it's not a pause beat
+                    logger.info((tuning, note.string))
                     note_value = (tuning[note.string - 1] + note.value) % 12
-                    note_durations[note_value] += beat_duration
+                    measure_note_durations[note_value] += beat_duration
             # Does not increment segment duration if we had just pauses since now
-            if any(duration for duration in note_durations):
+            if any(duration for duration in measure_note_durations):
                 segment_duration += beat_duration
         measure = Measure.get_or_create(beats)
         measure_match[measure].append(i)
@@ -80,9 +81,9 @@ def parse_track(song, track, index):
         # tempo is expressed in quarters per minute. When we reached a segment long enough, start key analysis
         # if segment_duration * 4 * 60 / tempo >= KS_SECONDS or m is track.measures[-1]:
         # Current implementation: make analysis at the end of each measure. (segment_duration not used)
-        finder.insert_durations(note_durations)
+        finder.insert_durations(measure_note_durations)
         segment_duration = 0
-        note_durations = [0] * 12
+        measure_note_durations = [0] * 12
     # Updates database objects
     # Calculates matches of track against form given the keys
     results = finder.get_results()
@@ -90,8 +91,12 @@ def parse_track(song, track, index):
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
+        for beat in measure.beats:
+            for note in beat.notes:
+                tn = TrackNote.get_or_create(track, note)
+                tn.match += float(beat.duration / total_duration)
     for k in set(results):
-        track.add_key(k)
+        track.calculate_scale_matches(k)
     return track
 
 
