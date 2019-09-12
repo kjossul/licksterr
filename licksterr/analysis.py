@@ -85,8 +85,8 @@ def parse_track(song, track, index):
         measure_note_durations = [0] * 12
     # Updates database objects
     # Calculates matches of track against form given the keys
-    results = finder.get_results()
-    track = Track(song_id=song.id, tuning_id=tuning.id, keys=[], index=index)
+    keys_found = finder.get_results()
+    track = Track(song_id=song.id, tuning_id=tuning.id, keys=list(keys_found), index=index)
     for measure, indexes in measure_match.items():
         tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
         db.session.add(tm)
@@ -94,7 +94,7 @@ def parse_track(song, track, index):
             for note in beat.notes:
                 tn = TrackNote.get_or_create(track, note)
                 tn.match += float(beat.duration / total_duration)
-    for k in set(results):
+    for k in set(keys_found):
         track.calculate_scale_matches(k)
     return track
 

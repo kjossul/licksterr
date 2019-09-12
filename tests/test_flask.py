@@ -11,7 +11,8 @@ class FlaskTest(LicksterrTest):
         self.upload_file()
         url = self.get_server_url() + "/tracks/1"
         json = requests.get(url).json()
-        self.assertEqual(1, len(json['match']))
+        self.logger.info(json)
+        self.assertEqual(1, len(json['keys']))
 
     def test_measure(self):
         self.upload_file()

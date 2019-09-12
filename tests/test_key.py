@@ -1,5 +1,6 @@
 import requests
 
+from licksterr.models import NOTES_DICT
 from tests import LicksterrTest
 
 
@@ -21,7 +22,6 @@ class FlaskTest(LicksterrTest):
         self.upload_file(filename, tracks=[track])
         url = self.get_server_url() + f"/tracks/1"
         json = requests.get(url).json()
-        d = json['match'][0]
-        self.assertEqual(key, d['key'])
-        self.assertEqual(is_major, d['isMajor'])
-        self.assertEqual(scale, d['scale'])
+        d = json['scale']
+        self.assertEqual(NOTES_DICT[key] + (not is_major) * 12, d['key'])
+        self.assertEqual(scale, d['name'])

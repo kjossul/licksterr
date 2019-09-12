@@ -203,8 +203,10 @@ class Track(db.Model):
     def to_dict(self, key=None):
         key = key if key else self.keys[0]
         info = row2dict(self)
-        info['match'] = self.get_form_match()
-        info["measureInfo"] = TrackMeasure.get_measure_info(self, key=key)
+        scale_matches = ScaleTrack.get_track_matches(self)
+        best_match = scale_matches[0]
+        # TODO return all requested scales
+        info['scale'] = {"name": best_match.scale.name.name, "key": best_match.key}
         info['key'] = key
         return info
 
@@ -219,6 +221,9 @@ class Track(db.Model):
                 match += tn.match if tn else 0
             st = ScaleTrack(scale=s, track=self, key=key_value, match=match)
             db.session.add(st)
+
+    def get_form_match(self):
+        return {}
 
 
 class Measure(db.Model):
@@ -345,6 +350,10 @@ class ScaleTrack(db.Model):
 
     scale = db.relationship('Scale', backref=db.backref("scale_to_track", cascade='all, delete-orphan'))
     track = db.relationship('Track', backref=db.backref("track_to_scale", cascade='all, delete-orphan'))
+
+    @classmethod
+    def get_track_matches(cls, track):
+        return sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)
 
 
 class TrackMeasure(db.Model):

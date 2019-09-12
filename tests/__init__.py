@@ -20,6 +20,7 @@ class LicksterrTest(LiveServerTestCase):
         db.session.remove()
         for table in db.metadata.tables:
             db.engine.execute(text('DROP TABLE %s CASCADE' % table))
+        # todo clear upload folder
 
     def create_app(self):
         setup_logging(to_file=False, default_level=logging.DEBUG)

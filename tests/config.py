@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from sqlalchemy.pool import NullPool
+
 TESTING = True
 DEBUG = True
 # Paths
@@ -20,3 +22,6 @@ DB_PORT = 5432
 DB_DB = 'licksterr-test'
 SQLALCHEMY_TRACK_MODIFICATIONS = False
 SQLALCHEMY_DATABASE_URI = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_IP}:{DB_PORT}/{DB_DB}"
+SQLALCHEMY_ENGINE_OPTIONS = {
+    'poolclass': NullPool
+}
