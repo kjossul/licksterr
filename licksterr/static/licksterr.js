@@ -86,10 +86,11 @@ function editTrackInformation(tracks) {
                         url: 'tracks/' + tracks[i],
                         type: 'get',
                         success: function (response) {
-                            let d = response['match'][0];
-                            let text = "Key of " + d['key'] + " " + (d['isMajor'] ? 'major' : 'minor') + " (" + d["scale"].toLowerCase() + " mode)";
+                            let d = response;
+                            let text = "Key of " + d['key'] + " " + (d['isMajor'] ? 'major' : 'minor') + " (" +
+                                d["scale"]["name"].toLowerCase() + " mode)";
                             initSongInfoContainer(text);
-                            findMeasures(response["measureInfo"], response["tuning"], response['key']);
+                            findMeasures(response["tuning"], response["scale"]['key']);
                         }
                     });
                 } else {
@@ -119,17 +120,17 @@ function initSongInfoContainer(innerText) {
 
 /* Note circles */
 
-function createNoteCircles(texts, highEHeight, tuning, key) {
+function createNoteCircles(texts, stringHeights, tuning, key) {
     texts.each(function (i, text) {
         let x = text.x.baseVal[0].value;
         let y = text.y.baseVal[0].value;
         let circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        let string = (y - highEHeight) / 11;
+        let string = stringHeights.indexOf(y);
         let fret = $(text).html().replace(/[^0-9]+/g, '');
         let interval = fret ? Math.abs(((tuning[string] + Number(fret)) % 12 - key)) % 12 : -1;
         let $circle = $(circle).attr({
             cx: x + (text.innerHTML.length / 2 + 1) * 3,
-            cy: y,
+            cy: y - 1,
             r: 8,
             class: "note note-" + interval,
         });
@@ -142,110 +143,23 @@ function updateNoteColors(colors) {
         className = ".note-" + i;
         classContainer = $("head").find('style[data-class="' + className + '"]');
         if (color) {
-            classContainer.html(className + ' {' +
-                'fill:' + color + '; display:block' +
-                '}');
+            classContainer.html(className + ' {fill:' + color + '; display:block}');
         } else {
             classContainer.html(className + ' {display:none}');
         }
     });
 }
 
-/* Form shape information */
 
-const FORM_BAR_HEIGHT = 12;
-const FORM_SHAPE_WIDTH = 150;
-const FORM_SHAPE_HEIGHT = 175;
-
-function findMeasures(measureInfo, tuning, key) {
-    let measureId = 0;
-    let matchId = 0;  // Used as a progressive number to show / hide form images popups
-    let formIdMap = {};  // Maps each formId to an incremental index
+function findMeasures(tuning, key) {
     $("svg").slice(1).each(function (i, svg) {
-        let start = null;
-        let xs = {};
-        let highEStringRect = null;
-        let y = null;
-        $(svg).find("rect").each(function (j, rect) {
-            let x = rect.x.baseVal.value;
-            start = start ? start : x;
-            if (j > 6 && start === x) {
-                // We have examined all pentagram, no need to go on with the tab, because we already know measures
-                // positions and lengths. Exit loop and keep only the y offset of the tablature.
-                highEStringRect = rect;
-                y = rect.y.baseVal.value;
-                let texts = $(svg).find("text[dominant-baseline='middle']");
-                createNoteCircles(texts, y, tuning, key);
-                return false;
-            }
-            let width = rect.width.baseVal.value;
-            if (width > 20) {
-                xs[x] = width;
-            }
+        let heights = new Set();
+        let marker = $(svg).find(".at").last();
+        marker.nextAll("rect").slice(0, -2).each(function (j, rect) {
+            heights.add(rect.y.baseVal.value);
         });
-        $.each(xs, function (x, width) {
-            if (measureInfo[measureId]) {
-                let j = 0;
-                let matchesLength = (Object.keys(measureInfo[measureId]).length);
-                let rectLen = width / matchesLength;
-                let imageX = Number(x) + width / 2 - FORM_SHAPE_WIDTH / 2;
-                $.each(measureInfo[measureId], function (formMeasureId, pngBytes) {
-                    let position = Number(x) + j * rectLen;
-                    let formId = formMeasureId.slice(0, formMeasureId.indexOf('_'));
-                    if (!formIdMap[formId]) {
-                        formIdMap[formId] = Object.keys(formIdMap).length;
-                    }
-                    drawRectangle(highEStringRect, position, y - 30, rectLen, FORM_BAR_HEIGHT, "form-bar form-bar-" + formIdMap[formId], matchId);
-                    let img = drawFormImage(highEStringRect, pngBytes, imageX, y - 35 - FORM_SHAPE_HEIGHT, matchId);
-                    j++;
-                    matchId++;
-                })
-            }
-            measureId++;
-        });
+        heights = Array.from(heights);
+        let texts = $(svg).find("text[dominant-baseline='middle']");
+        createNoteCircles(texts, heights, tuning, key);
     });
-}
-
-function drawRectangle(nextElement, x, y, width, height, clsName, formId = null) {
-    let rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    rect = $(rect).attr({
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        class: clsName
-    });
-    $(nextElement).before(rect);
-    if (formId != null) {
-        $(rect).hover(function () {
-            $("#form-img-" + formId).removeAttr("display");
-            $(rect).attr("style", "opacity: 0.8");
-
-        }, function () {
-            $("#form-img-" + formId).attr("display", "none");
-            $(rect).removeAttr("style");
-        });
-    }
-    return rect;
-}
-
-function drawFormImage(nextElement, pngBytes, x, y, index) {
-    let g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g = $(g).attr({
-        id: "form-img-" + index,
-        display: "none"
-    });
-    let img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
-    img = $(img).attr({
-        x: x,
-        y: y,
-        width: FORM_SHAPE_WIDTH,
-        height: FORM_SHAPE_HEIGHT,
-        href: "data:image/png;base64," + pngBytes,
-        class: "form-image"
-    });
-    $(nextElement).before(g);
-    $(g).append(img);
-    drawRectangle(img, x, y, FORM_SHAPE_WIDTH, FORM_SHAPE_HEIGHT, "form-img-border");
-    return g;
 }

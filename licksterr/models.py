@@ -205,12 +205,12 @@ class Track(db.Model):
 
     def to_dict(self, key=None):
         key = key if key else self.keys[0]
-        info = row2dict(self)
+        info = {}
         scale_matches = ScaleTrack.get_track_matches(self)
         best_match = scale_matches[0]
-        # TODO return all requested scales
         info['scale'] = best_match
-        info['key'] = key
+        info['key'] = notes.int_to_note(key % 12)
+        info['tuning'] = Tuning.query.get(self.tuning_id).value
         return info
 
     def calculate_scale_matches(self, key):
