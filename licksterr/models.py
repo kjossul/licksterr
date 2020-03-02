@@ -150,7 +150,7 @@ class Scale(db.Model):
         super().__init__(name=SCALES_DICT[scale], tuning_id=tuning.id, intervals=intervals,
                          is_major=SCALES_DICT[scale] in SCALES_TYPE[True], **kwargs)
 
-    def get_notes(self, key):
+    def get_notes(self, key=0):
         tuning = Tuning.query.get(self.tuning_id)
         return (note for note in Note.get_all_notes()
                 if (note.get_int_value(tuning.value) - key) % 12 in self.intervals)
