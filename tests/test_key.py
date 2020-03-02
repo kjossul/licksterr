@@ -23,5 +23,6 @@ class FlaskTest(LicksterrTest):
         url = self.get_server_url() + f"/tracks/1"
         json = requests.get(url).json()
         d = json['scale']
-        self.assertEqual(NOTES_DICT[key] + (not is_major) * 12, d['key'])
+        self.assertEqual(NOTES_DICT[key], d['key'])
+        self.assertEqual(is_major, d['is_major'])
         self.assertEqual(scale, d['name'])

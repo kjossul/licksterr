@@ -4,7 +4,6 @@ from collections import defaultdict
 from fractions import Fraction
 
 import guitarpro as gp
-from guitarpro import NoteType
 from mingus.core import notes
 
 from licksterr.exceptions import BadTabException
@@ -58,7 +57,9 @@ def parse_track(song, track, index):
     measure_note_durations = [0] * 12
     segment_duration = 0
     prev_beat = None  # used to correctly store tied note information
-    for i, m in enumerate(track.measures):
+    note_match = defaultdict(int)  # % a note occupies in the track (chords are treated as separated notes)
+    for i, m in enumerate(track.measures, start=1):
+        # fixme handle different durations based on bmp changes
         beats = []
         for b in m.voices[0].beats:  # fixme handle multiple voices
             beat = Beat.get_or_create(b, prev_beat=prev_beat)
@@ -66,11 +67,11 @@ def parse_track(song, track, index):
             prev_beat = beat
             # k-s analysis
             beat_duration = Fraction(1 / beat.duration)
-            total_duration += beat_duration
-            for note in b.notes:
-                if note.string > 0 and note.type != NoteType.dead:  # if it's not a pause beat
-                    note_value = (tuning[note.string - 1] + note.value) % 12
-                    measure_note_durations[note_value] += beat_duration
+            for note in beat.notes:
+                note_match[note] += beat_duration
+                total_duration += beat_duration
+                if not note.is_pause():
+                    measure_note_durations[note.get_int_value()] += beat_duration
             # Does not increment segment duration if we had just pauses since now
             if any(duration for duration in measure_note_durations):
                 segment_duration += beat_duration
@@ -83,17 +84,19 @@ def parse_track(song, track, index):
         finder.insert_durations(measure_note_durations)
         segment_duration = 0
         measure_note_durations = [0] * 12
+    total_measures = i
+    note_match = {k: v / total_duration for k, v in note_match.items()}
     # Updates database objects
     # Calculates matches of track against form given the keys
     keys_found = finder.get_results()
     track = Track(song_id=song.id, tuning_id=tuning.id, keys=list(keys_found), index=index)
     for measure, indexes in measure_match.items():
-        tm = TrackMeasure(track=track, measure=measure, match=len(track.measures), indexes=indexes)
+        weight = len(indexes)
+        tm = TrackMeasure(track=track, measure=measure, match=weight / total_measures, indexes=indexes)
         db.session.add(tm)
-        for beat in measure.beats:
-            for note in beat.notes:
-                tn = TrackNote.get_or_create(track, note)
-                tn.match += float(beat.duration / total_duration)
+    for note, match in note_match.items():
+        tn = TrackNote.get_or_create(track, note, match=float(match))
+        db.session.add(tn)
     for k in set(keys_found):
         track.calculate_scale_matches(k)
     return track

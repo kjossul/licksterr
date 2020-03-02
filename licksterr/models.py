@@ -76,7 +76,7 @@ SCALES_TYPE = {
     False: [ScaleEnum.MINORPENTATONIC, ScaleEnum.AEOLIAN, ScaleEnum.DORIAN, ScaleEnum.PHRYGIAN, ScaleEnum.LOCRIAN,
             ScaleEnum.MINORBLUES]
 }
-STANDARD_TUNING = [4, 11, 7, 2, 9, 4]
+STANDARD_TUNING = (4, 11, 7, 2, 9, 4)
 FLOAT_PRECISION = 5
 
 
@@ -116,7 +116,6 @@ class Tuning(db.Model):
     scales = db.relationship('Scale')
     tracks = db.relationship('Track')
 
-
     def __str__(self):
         return f"{self.name} - {self.value}"
 
@@ -126,6 +125,7 @@ class Tuning(db.Model):
     @classmethod
     def get_by_value(cls, tuning):
         return cls.query.filter_by(value=tuning).first()
+
 
 class Scale(db.Model):
     """
@@ -141,16 +141,19 @@ class Scale(db.Model):
     tuning_id = db.Column(db.Integer, db.ForeignKey('tuning.id'), nullable=False)
     name = db.Column(db.Enum(ScaleEnum), nullable=False)
     intervals = db.Column(ARRAY(db.Integer), unique=True)
+    is_major = db.Column(db.Boolean, nullable=False)
 
     tracks = association_proxy('scale_to_track', 'track')
 
     def __init__(self, scale, tuning, **kwargs):
         intervals = [notes.note_to_int(note) for note in scale('C').ascending()]
-        super().__init__(name=SCALES_DICT[scale], tuning_id=tuning.id, intervals=intervals, **kwargs)
+        super().__init__(name=SCALES_DICT[scale], tuning_id=tuning.id, intervals=intervals,
+                         is_major=SCALES_DICT[scale] in SCALES_TYPE[True], **kwargs)
 
-    def get_notes(self, key=0):
+    def get_notes(self, key):
         tuning = Tuning.query.get(self.tuning_id)
-        return (note for note in Note.get_all_notes() if note.get_int_value(tuning, key) in self.intervals)
+        return (note for note in Note.get_all_notes()
+                if (note.get_int_value(tuning.value) - key) % 12 in self.intervals)
 
 
 class Chord(db.Model):
@@ -206,7 +209,7 @@ class Track(db.Model):
         scale_matches = ScaleTrack.get_track_matches(self)
         best_match = scale_matches[0]
         # TODO return all requested scales
-        info['scale'] = {"name": best_match.scale.name.name, "key": best_match.key}
+        info['scale'] = best_match
         info['key'] = key
         return info
 
@@ -216,7 +219,7 @@ class Track(db.Model):
         for scale in SCALES_TYPE[is_major]:
             match = 0
             s = Scale.query.filter_by(tuning_id=self.tuning_id, name=scale).first()
-            for note in s.get_notes(key_value):
+            for note in s.get_notes(key):
                 tn = TrackNote.query.get((self.id, note.id))
                 match += tn.match if tn else 0
             st = ScaleTrack(scale=s, track=self, key=key_value, match=match)
@@ -233,6 +236,9 @@ class Measure(db.Model):
     repr = db.Column(db.String(), nullable=False, unique=True)
     forms = association_proxy('measure_to_form', 'form')
     beats = association_proxy('measure_to_beat', 'beat')
+
+    def __str__(self):
+        return self.repr
 
     def to_dict(self):
         info = row2dict(self)
@@ -286,11 +292,11 @@ class Beat(db.Model):
             for note in beat.notes:
                 if note.type == NoteType.tie and prev_beat:
                     try:
-                        ns.append((next(prev_note for prev_note in prev_beat.notes if note.string == prev_note.string),
-                                   True))
+                        ns.append((next(prev_note for prev_note in prev_beat.notes
+                                        if note.string - 1 == prev_note.string), True))
                     except StopIteration:
-                        logger.debug(
-                            f"Found tie to non existing note at measure {beat.voice.measure.number} (skipping)")
+                        logger.debug(f"Found tie to non-marked note at measure {beat.voice.measure.number} on string "
+                                     f"{note.string} (skipping).")
                 else:
                     ns.append((Note.get(note.string - 1, note.value, muted=note.type == NoteType.dead), False))
         id = ''.join(repr(note) for note, _ in ns) + f'D{beat.duration.value:02}'
@@ -319,11 +325,14 @@ class Note(db.Model):
     def to_dict(self):
         return row2dict(self)
 
-    def get_int_value(self, tuning, key=0):
-        return (tuning.value[self.string] + self.fret + key) % 12
+    def get_int_value(self, tuning=STANDARD_TUNING):
+        return (tuning[self.string] + self.fret) % 12
 
     def equals_string_and_pitch(self, other):
         return self.string == other.string and abs(self.fret - other.fret) % 12 == 0
+
+    def is_pause(self):
+        return self.string == -1
 
     @classmethod
     def get(cls, string, fret, muted=False):
@@ -353,7 +362,8 @@ class ScaleTrack(db.Model):
 
     @classmethod
     def get_track_matches(cls, track):
-        return sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)
+        return [{"name": x.scale.name.name, "key": x.key, "match": x.match, "is_major": x.scale.is_major} for x in
+                sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)]
 
 
 class TrackMeasure(db.Model):
@@ -387,10 +397,10 @@ class TrackNote(db.Model):
     track = db.relationship('Track', backref=db.backref("track_to_note", cascade='all, delete-orphan'))
 
     @classmethod
-    def get_or_create(cls, track, note):
+    def get_or_create(cls, track, note, match=0):
         tn = cls.query.get((track.id, note.id))
         if not tn:
-            tn = TrackNote(track=track, note_id=note.id, match=0)
+            tn = TrackNote(track=track, note_id=note.id, match=match)
         return tn
 
 
