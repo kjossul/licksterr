@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from enum import Enum
 from fractions import Fraction
 
@@ -150,11 +149,14 @@ class Scale(db.Model):
         return (note for note in Note.get_all_notes()
                 if (note.get_int_value(tuning) - key) % 12 in self.intervals)
 
-    def get_intervals_dict(self, key):
+    def get_notes_names(self, key):
         key_name = notes.int_to_note(key)
-        names = [note for note in ENUM_DICT[self.name](key_name).ascending()][:-1]
-        return {v: {"name": other_name, "interval": intervals.determine(key_name, other_name)}
-                for v, other_name in zip(self.intervals, names)}
+        return {(interval + key) % 12: name for interval, name in
+                zip(self.intervals, ENUM_DICT[self.name](key_name).ascending()[:-1])}
+
+    @classmethod
+    def get_by_name(cls, name):
+        return cls.query.filter_by(name=name).first()
 
 
 class Chord(db.Model):
@@ -212,7 +214,10 @@ class Track(db.Model):
         info['scale'] = best_match
         info['key'] = notes.int_to_note(key % 12)
         info['tuning'] = Tuning.query.get(self.tuning_id).value
-        info['notes'] = TrackNote.get_track_matches(self)
+        info['notes'] = TrackNote.get_track_matches(self, key=key, tuning=info['tuning'])
+        scale = Scale.query.get(best_match["id"])
+        for value, name in scale.get_notes_names(key % 12).items():
+            info['notes'][value]["name"] = name
         return info
 
     def calculate_scale_matches(self, key):
@@ -371,8 +376,8 @@ class ScaleTrack(db.Model):
 
     @classmethod
     def get_track_matches(cls, track):
-        return [{"name": x.scale.name.name, "key": x.key, "match": x.match, "is_major": x.scale.is_major,
-                 "intervals": x.scale.get_intervals_dict(key=x.key)}
+        return [{"id": x.scale_id, "name": x.scale.name.name, "key": x.key, "match": x.match,
+                 "is_major": x.scale.is_major}
                 for x in sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)]
 
 
@@ -408,11 +413,15 @@ class TrackNote(db.Model):
     note = db.relationship('Note', backref=db.backref("note_to_track", cascade='all, delete-orphan'))
 
     @classmethod
-    def get_track_matches(cls, track):
+    def get_track_matches(cls, track, key, tuning):
+        key_name = notes.int_to_note(key % 12)
         tns = cls.query.filter_by(track=track).all()
-        info = defaultdict(float)
+        info = {i: {"match": 0, "name": notes.int_to_note(i),
+                    "interval": intervals.determine(key_name, notes.int_to_note(i))} for i in range(12)}
+        info[-1] = {"match": 0, "name": "Pause", "interval": "Pause"}
         for tn in tns:
-            info[tn.note.get_int_value()] += tn.match
+            value = tn.note.get_int_value(tuning=tuning)
+            info[value]["match"] += tn.match
         return info
 
     @classmethod

@@ -2,9 +2,8 @@
 {% block title %}{{ song|e }}{% endblock %}
 {% block scripts %}
     {{ super() }}
-    <!-- jQuery Plugin -->
-    <script src="{{ url_for('static', filename="vendors/js/jquery-2.2.3.min.js") }}"></script>
-
+    <!-- Including D3 for chart drawings -->
+    <script src="https://d3js.org/d3.v5.min.js"></script>
     <!-- Including alphaTab -->
     <script src="{{ url_for('static', filename="vendors/js/alphaTab/swfobject.js") }}"></script>
     <script src="{{ url_for('static', filename="vendors/js/alphaTab/alphaTab.min.js") }}"></script>
@@ -29,6 +28,7 @@
     </script>
 {% endblock %}
 {% block css %}
+    {{ super() }}
     <link href="{{ url_for('static', filename="vendors/css/mermaid.css") }}" rel="stylesheet">
     <link href="{{ url_for('static', filename="vendors/css/bootstrap/bootstrap.css") }}" rel="stylesheet">
     <link href="{{ url_for('static', filename="vendors/css/adminlte/AdminLTE.css") }}" rel="stylesheet">
@@ -125,6 +125,7 @@
             </div>
         </div>
     </nav>
+    <div id="pieChart"></div>
     <div id="content">
         <div id="alphaTab" data-file="{{ filename }}" data-player="{{ url_for('static', filename="vendors/js/alphaTab/default.sf2") }}"
              data-player-offset="[-10,-70]" class="alphaTab" style="position: relative; text-align: left;">
