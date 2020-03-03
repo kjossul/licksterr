@@ -16,7 +16,7 @@ def init_fretboard_elements():
     db.session.commit()
     logger.debug("Added standard tuning to database.")
     for scale in SCALES_DICT.keys():
-        db.session.add(Scale(scale, standard_tuning))
+        db.session.add(Scale(scale))
     logger.debug("Added scales to database.")
     db.session.commit()
     logger.info("Database initialization completed.")

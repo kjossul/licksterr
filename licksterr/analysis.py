@@ -51,6 +51,8 @@ def parse_track(song, track, index):
     """
     logger.info(f"Parsing track {track.name}")
     tuning = Tuning.get_by_value([notes.note_to_int(str(string)[0]) for string in track.strings])
+    if not tuning:
+        raise ValueError("Tuning not present in database")  # fixme
     measure_match = defaultdict(list)  # measure: list of indexes the measure occupies in the track
     finder = KeyFinderAggregator()
     total_duration = 0

@@ -1,10 +1,11 @@
 import logging
+from collections import defaultdict
 from enum import Enum
 from fractions import Fraction
 
 from flask_sqlalchemy import SQLAlchemy
 from guitarpro import NoteType
-from mingus.core import notes, scales
+from mingus.core import notes, scales, intervals
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.mutable import MutableList
@@ -113,7 +114,6 @@ class Tuning(db.Model):
     name = db.Column(db.String())
     value = db.Column(db.ARRAY(db.Integer))
 
-    scales = db.relationship('Scale')
     tracks = db.relationship('Track')
 
     def __str__(self):
@@ -133,27 +133,28 @@ class Scale(db.Model):
     the guitar we can just transpose the shape to obtain a different key.
     """
     __tablename__ = 'scale'
-    __table_args__ = (
-        db.UniqueConstraint('name', 'tuning_id'),
-    )
 
     id = db.Column(db.Integer, primary_key=True)
-    tuning_id = db.Column(db.Integer, db.ForeignKey('tuning.id'), nullable=False)
-    name = db.Column(db.Enum(ScaleEnum), nullable=False)
+    name = db.Column(db.Enum(ScaleEnum), nullable=False, unique=True)
     intervals = db.Column(ARRAY(db.Integer), unique=True)
     is_major = db.Column(db.Boolean, nullable=False)
 
     tracks = association_proxy('scale_to_track', 'track')
 
-    def __init__(self, scale, tuning, **kwargs):
+    def __init__(self, scale, **kwargs):
         intervals = [notes.note_to_int(note) for note in scale('C').ascending()]
-        super().__init__(name=SCALES_DICT[scale], tuning_id=tuning.id, intervals=intervals,
+        super().__init__(name=SCALES_DICT[scale], intervals=intervals,
                          is_major=SCALES_DICT[scale] in SCALES_TYPE[True], **kwargs)
 
-    def get_notes(self, key=0):
-        tuning = Tuning.query.get(self.tuning_id)
+    def get_notes(self, tuning=STANDARD_TUNING, key=0):
         return (note for note in Note.get_all_notes()
-                if (note.get_int_value(tuning.value) - key) % 12 in self.intervals)
+                if (note.get_int_value(tuning) - key) % 12 in self.intervals)
+
+    def get_intervals_dict(self, key):
+        key_name = notes.int_to_note(key)
+        names = [note for note in ENUM_DICT[self.name](key_name).ascending()][:-1]
+        return {v: {"name": other_name, "interval": intervals.determine(key_name, other_name)}
+                for v, other_name in zip(self.intervals, names)}
 
 
 class Chord(db.Model):
@@ -211,15 +212,17 @@ class Track(db.Model):
         info['scale'] = best_match
         info['key'] = notes.int_to_note(key % 12)
         info['tuning'] = Tuning.query.get(self.tuning_id).value
+        info['notes'] = TrackNote.get_track_matches(self)
         return info
 
     def calculate_scale_matches(self, key):
+        tuning = Tuning.query.get(self.tuning_id).value
         is_major = key < 12
         key_value = key % 12
         for scale in SCALES_TYPE[is_major]:
             match = 0
-            s = Scale.query.filter_by(tuning_id=self.tuning_id, name=scale).first()
-            for note in s.get_notes(key):
+            s = Scale.query.filter_by(name=scale).first()
+            for note in s.get_notes(tuning=tuning, key=key):
                 tn = TrackNote.query.get((self.id, note.id))
                 match += tn.match if tn else 0
             st = ScaleTrack(scale=s, track=self, key=key_value, match=match)
@@ -319,6 +322,9 @@ class Note(db.Model):
     string = db.Column(db.Integer, nullable=False)
     fret = db.Column(db.Integer, nullable=False)
 
+    def __str__(self):
+        return repr(self)
+
     def __repr__(self):
         return f"S{self.string}F{self.fret:02}"
 
@@ -326,7 +332,10 @@ class Note(db.Model):
         return row2dict(self)
 
     def get_int_value(self, tuning=STANDARD_TUNING):
-        return (tuning[self.string] + self.fret) % 12
+        return -1 if self.is_pause() else (tuning[self.string] + self.fret) % 12
+
+    def get_name(self, tuning):
+        return 'P' if self.is_pause() else notes.int_to_note(self.get_int_value(tuning=tuning))
 
     def equals_string_and_pitch(self, other):
         return self.string == other.string and abs(self.fret - other.fret) % 12 == 0
@@ -362,8 +371,9 @@ class ScaleTrack(db.Model):
 
     @classmethod
     def get_track_matches(cls, track):
-        return [{"name": x.scale.name.name, "key": x.key, "match": x.match, "is_major": x.scale.is_major} for x in
-                sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)]
+        return [{"name": x.scale.name.name, "key": x.key, "match": x.match, "is_major": x.scale.is_major,
+                 "intervals": x.scale.get_intervals_dict(key=x.key)}
+                for x in sorted(cls.query.filter_by(track=track).all(), key=lambda x: x.match, reverse=True)]
 
 
 class TrackMeasure(db.Model):
@@ -395,6 +405,15 @@ class TrackNote(db.Model):
     match = db.Column(db.Float(precision=FLOAT_PRECISION))
 
     track = db.relationship('Track', backref=db.backref("track_to_note", cascade='all, delete-orphan'))
+    note = db.relationship('Note', backref=db.backref("note_to_track", cascade='all, delete-orphan'))
+
+    @classmethod
+    def get_track_matches(cls, track):
+        tns = cls.query.filter_by(track=track).all()
+        info = defaultdict(float)
+        for tn in tns:
+            info[tn.note.get_int_value()] += tn.match
+        return info
 
     @classmethod
     def get_or_create(cls, track, note, match=0):
